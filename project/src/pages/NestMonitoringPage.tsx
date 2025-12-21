@@ -37,9 +37,9 @@ function HlsPlayer({ src, className }: { src: string; className?: string }) {
 export default function NestMonitoringPage() {
   const videoFeeds: VideoFeed[] = [
     { id: 1, zone: 'Beach Zone A', status: 'active', alerts: 1, nests: 12 },
-    { id: 2, zone: 'Beach Zone B', status: 'active', alerts: 0, nests: 8 },
-    { id: 3, zone: 'Beach Zone C', status: 'active', alerts: 2, nests: 15 },
-    { id: 4, zone: 'Beach Zone D', status: 'active', alerts: 0, nests: 8 },
+    { id: 1, zone: 'Beach Zone B', status: 'active', alerts: 0, nests: 15 },
+    { id: 1, zone: 'Beach Zone C', status: 'active', alerts: 2, nests: 8 },
+    { id: 1, zone: 'Beach Zone D', status: 'active', alerts: 0, nests: 7 },
   ];
 
   return (

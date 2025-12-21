@@ -1,6 +1,7 @@
 import { Activity, Video, MapPin, Droplets, TrendingUp, AlertCircle } from 'lucide-react';
 import DashboardCard from '../components/DashboardCard';
 import StatCard from '../components/StatCard';
+import HlsPlayer from '../components/HlsPlayer';
 
 export default function HomePage() {
   return (
@@ -79,11 +80,13 @@ export default function HomePage() {
           iconBg="bg-teal-100"
         >
           <div className="mb-4 bg-gray-900 rounded-xl overflow-hidden aspect-video relative">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Video className="h-16 w-16 text-white/50" />
-            </div>
-            <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full animate-pulse">
-              LIVE
+            <HlsPlayer
+              src="http://localhost:8000/streams/camera1/stream.m3u8"
+              className="w-full h-full object-cover rounded-xl"
+            />
+            <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center space-x-1 animate-pulse">
+              <span className="inline-block h-2 w-2 bg-white rounded-full"></span>
+              <span>LIVE</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
