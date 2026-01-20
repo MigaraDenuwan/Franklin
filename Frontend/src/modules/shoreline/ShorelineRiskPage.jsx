@@ -15,17 +15,15 @@ import {
 import ShorelineBeachMap from "../../shared/components/maps/ShorelineBeachMap.jsx";
 import ShorelineVideoPlayer from "../shoreline/ShorelineVideoPlayer.jsx";
 import ShorelineAlertsPanel from "../shoreline/ShorelineAlertsPanel.jsx";
-import EnvironmentManualForm from "../shoreline/EnvironmentManualForm.jsx";
-import { COLORS, SectionHeader, LiveDot, Panel } from "./Shorelinetheme.jsx";
+
 import {
   getBoundary,
   getNests,
   getAlerts,
-  predictDemoVideo,
-  evaluateVideo,
+  evaluateOffline,
+  // predictVideo,          // ❌ optional (keep only if you still want upload video)
+  predictDemoVideo, // ✅ NEW: auto-load demo predictions
 } from "./api/shorelineApi.js";
-
-import { useAuth } from "@clerk/clerk-react";
 
 const DEMO_VIDEO_SRC = "/videos/shoreline_demo.mp4";
 const DEMO_VIDEO_NAME = "shoreline_demo.mp4";
@@ -140,17 +138,9 @@ export default function ShorelineRiskPage() {
           y: item.y,
           zone: item.label,
           status: "safe",
-          distanceToShoreline: null,
         })),
       );
-
-      const items = Array.isArray(a?.items)
-        ? a.items
-        : Array.isArray(a)
-          ? a
-          : [];
-
-      setAlerts(items);
+      setAlerts(a || []);
     } catch (e) {
       console.error("Static load failed:", e);
     }
@@ -211,29 +201,13 @@ export default function ShorelineRiskPage() {
 
       setVideoUrl(objectUrl);
       setFrameSeriesPct([]);
-      setCrossedBoundary(false);
-
-      const data = await evaluateVideo(file, 3, token);
-
-      const series = (data?.frames || [])
-        .map((f) => ({
-          t: Number(f.t || 0),
-          shorelinePct: f.shorelinePct || [],
-          evaluation: f.evaluation || null,
-          risk: f?.fusion?.finalRisk || "low",
-        }))
-        .filter((f) => (f.shorelinePct || []).length > 1);
-
-      setFrameSeriesPct(series);
-
-      if (series[0]?.shorelinePct) setShoreline(series[0].shorelinePct);
-
-      const firstEval = series[0]?.evaluation;
-      setCrossedBoundary(Boolean(firstEval?.boundaryCrossed));
-
-      const riskMap = new Map(
-        (firstEval?.nestsEvaluated || []).map((n) => [n.id, n.distancePct]),
-      );
+      const data = await evaluateOffline(file, 3);
+      setShoreline(data?.shoreline || []);
+      setCrossedBoundary(Boolean(data?.evaluation?.boundaryCrossed));
+      const riskMap = new Map();
+      for (const n of data?.evaluation?.nestsAtRisk || []) {
+        riskMap.set(n.id, n.distancePct);
+      }
 
       setNests((prev) =>
         prev.map((n) => {
@@ -325,41 +299,18 @@ export default function ShorelineRiskPage() {
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="mb-2 flex items-center gap-2">
-            <LiveDot color={COLORS.success} />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Live Monitoring · {lastUpdated || "—"}
-            </span>
-          </div>
-
-          <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">
-            Shoreline Risk Monitoring
-          </h1>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Dynamic shoreline tracking, boundary breach detection, and nest risk
-            evaluation
-          </p>
+          <h1 className="text-3xl font-bold dark:text-white">Shoreline Risk</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm">Dynamic tracking of erosion and tide risks</p>
+          {lastUpdated && <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-widest">Last Update: {lastUpdated}</p>}
         </div>
 
-        <label className="inline-flex cursor-pointer items-center gap-2 self-start rounded-xl bg-gradient-to-r from-[#2563eb] to-[#06b6d4] px-5 py-3 font-semibold text-white shadow-md transition hover:shadow-lg lg:self-auto">
-          {loading ? (
-            <Activity size={16} className="animate-pulse" />
-          ) : (
-            <Upload size={16} />
-          )}
-          {loading ? "Analyzing..." : "Analyze Video"}
-          <input
-            type="file"
-            accept="video/*"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) runVideoEvaluation(f);
-              e.target.value = "";
-            }}
-          />
-        </label>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg cursor-pointer transition-all active:scale-95 text-sm font-bold">
+            <Upload className="w-4 h-4" />
+            {loading ? "Processing..." : "Analyze Image"}
+            <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) runOfflineEvaluation(f); e.target.value = ""; }} />
+          </label>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -406,101 +357,46 @@ export default function ShorelineRiskPage() {
         />
       </div>
 
-      {currentEnvironment && (
-        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-sky-700">
-            Active Environment Reading
+      {/* Map */}
+      <DashboardCard title="Risk Assessment Map" icon={MapPin}>
+        <ShorelineBeachMap
+          boundary={boundary}
+          shoreline={shoreline}
+          nests={nests}
+          crossedBoundary={crossedBoundary}
+        />
+
+        <ShorelineAlertsPanel staffName="Ranger-01" />
+
+        {alerts.length === 0 && (
+          <p className="mt-4 text-sm text-gray-500">
+            No active shoreline alerts.
+          </p>
+        )}
+      </DashboardCard>
+
+      {/* ✅ Demo Video Playback under Map */}
+      {videoUrl && (
+        <DashboardCard title="Demo Video Playback (AI Tracking)" icon={Video}>
+          <ShorelineVideoPlayer
+            videoRef={videoRef}
+            src={videoUrl}
+            frameSeriesPct={frameSeriesPct}
+            onTimeShoreline={(pts) => setShoreline(pts)}
+          />
+
+          <p className="mt-3 text-sm text-gray-600">
+            As the demo video plays, the shoreline updates on the video overlay
+            and on the map.
           </p>
 
-          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-700">
-            <span>{currentEnvironment.station || "Unknown station"}</span>
-
-            <span className="inline-flex items-center gap-1.5">
-              <CloudRain size={14} className="text-sky-600" />
-              Rain 3h: {currentEnvironment?.rain?.last3h_mm ?? "N/A"} mm
-            </span>
-
-            <span className="inline-flex items-center gap-1.5">
-              <CloudRain size={14} className="text-sky-600" />
-              Rain 6h: {currentEnvironment?.rain?.next6h_mm ?? "N/A"} mm
-            </span>
-
-            <span className="inline-flex items-center gap-1.5">
-              <Waves size={14} className="text-indigo-600" />
-              Tide: {currentEnvironment?.tide?.height_m ?? "N/A"} m
-            </span>
-
-            <span>Trend: {currentEnvironment?.tide?.trend ?? "unknown"}</span>
-          </div>
-        </div>
+          {frameSeriesPct.length > 0 && (
+            <p className="mt-1 text-xs text-gray-500">
+              Frames processed: {frameSeriesPct.length}
+            </p>
+          )}
+        </DashboardCard>
       )}
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="space-y-4 xl:col-span-8">
-          <Panel>
-            <SectionHeader
-              icon={MapPin}
-              title="Risk Topography"
-              accent={COLORS.primary}
-            />
-            <ShorelineBeachMap
-              boundary={boundary}
-              shoreline={shoreline}
-              nests={nests}
-              crossedBoundary={crossedBoundary}
-            />
-          </Panel>
-
-          <Panel>
-            <SectionHeader
-              icon={Video}
-              title="Live Tracking"
-              accent="#8b5cf6"
-            />
-
-            {videoUrl ? (
-              <div className="space-y-4">
-                <ShorelineVideoPlayer
-                  videoRef={videoRef}
-                  src={videoUrl}
-                  frameSeriesPct={frameSeriesPct}
-                  onTimeShoreline={setShoreline}
-                />
-
-                <div className="flex items-start gap-3 rounded-xl border border-violet-100 bg-violet-50 p-3">
-                  <div className="mt-0.5 text-violet-600">
-                    <Zap size={15} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-violet-700">
-                      AI Tracking Process
-                    </p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
-                      Shoreline contours are detected frame by frame and
-                      evaluated against protected boundary lines and nest
-                      proximity thresholds.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-[220px] flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[#dbe7f3] bg-[#f8fbff]">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                  <Video size={28} />
-                </div>
-                <p className="text-sm font-semibold text-slate-600">
-                  Upload footage to begin shoreline analysis
-                </p>
-              </div>
-            )}
-          </Panel>
-        </div>
-
-        <div className="space-y-4 xl:col-span-4">
-          <ShorelineAlertsPanel staffName="Ranger-01" initialItems={alerts} />
-          <EnvironmentManualForm onSaved={setCurrentEnvironment} />
-        </div>
-      </div>
     </div>
   );
 }

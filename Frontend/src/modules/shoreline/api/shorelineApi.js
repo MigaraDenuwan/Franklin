@@ -42,6 +42,9 @@ export async function getNests() {
 // export async function getAlerts() {
 //   const res = await fetch(`${API_BASE}/api/shoreline/alerts`);
 //   const { json, text } = await safeBody(res);
+// export async function getAlerts() {
+//   const res = await fetch(`${API_BASE}/api/shoreline/alerts`);
+//   const { json, text } = await safeBody(res);
 
 //   if (!res.ok) throw new Error(json?.detail || text || "Failed to load alerts");
 //   return json;
@@ -123,7 +126,9 @@ export async function predictDemoVideo(name = "shoreline_demo.mp4") {
   return json;
 }
 
-
+// ---------------------
+// Alerts (MongoDB)
+// ---------------------
 export async function getAlerts(limit = 50, page = 1) {
   const url = `${API_BASE}/api/shoreline/alerts?limit=${limit}&page=${page}`;
   const res = await fetch(url);
@@ -156,48 +161,5 @@ export async function resolveAlert(id, staff = "Ranger-01") {
 
   const { json, text } = await safeBody(res);
   if (!res.ok) throw new Error(json?.detail || text || "Resolve failed");
-  return json;
-}
-
-// ---------------------
-// Environment (API + Manual)
-// ---------------------
-export async function getEnvironmentCurrent() {
-  const res = await fetch(`${API_BASE}/api/environment/current`);
-  const { json, text } = await safeBody(res);
-  if (!res.ok)
-    throw new Error(json?.detail || text || "Failed to load environment");
-  return json;
-}
-
-export async function saveManualEnvironment(payload) {
-  const res = await fetch(`${API_BASE}/api/environment/manual`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const { json, text } = await safeBody(res);
-  if (!res.ok)
-    throw new Error(
-      json?.detail || text || "Failed to save manual environment",
-    );
-  return json;
-}
-
-export async function evaluateVideo(file, bufferPct = 3, token) {
-  const form = new FormData();
-  form.append("file", file, file.name);
-
-  const url = `${API_BASE}/api/shoreline/evaluate-video?bufferPct=${bufferPct}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: form,
-  });
-
-  const { json, text } = await safeBody(res);
-  if (!res.ok)
-    throw new Error(json?.detail || text || "Video evaluation failed");
   return json;
 }
