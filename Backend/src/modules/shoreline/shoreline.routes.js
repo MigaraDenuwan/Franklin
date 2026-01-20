@@ -1,6 +1,4 @@
 import { Router } from "express";
-import { requireAuth } from "@clerk/express";
-
 import alertRoutes from "./alerts.routes.js";
 
 import {
@@ -13,7 +11,6 @@ import {
   predictProxy,
   predictVideoProxy,
   predictVideoDemo,
-  evaluateVideoUpload,
 } from "./shoreline.controller.js";
 
 import {
@@ -36,16 +33,13 @@ router.get("/nests", getNests);
 router.post("/nests", addNest);
 router.delete("/nests/:id", deleteNest);
 
-// --------------------
-// Alerts (MongoDB)
-// --------------------
+// ✅ Alerts (MongoDB)
 router.use("/alerts", alertRoutes);
 
-// --------------------
-// Inference (IMAGE / VIDEO)
-// --------------------
-router.post("/predict", uploadSingleImage, predictProxy);
-router.post("/predict-video", uploadSingleVideo, predictVideoProxy);
+// Inference
+router.post("/predict", uploadSingleFile, predictProxy);
+router.post("/evaluate-offline", uploadSingleFile, evaluateOffline);
+router.post("/predict-video", uploadSingleFile, predictVideoProxy);
 router.get("/predict-video-demo", predictVideoDemo);
 
 // --------------------

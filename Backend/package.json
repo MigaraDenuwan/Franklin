@@ -17,17 +17,12 @@
     "@clerk/express": "^1.7.67",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "axios": "^1.13.2",
-    "body-parser": "^2.2.2",
-    "cors": "^2.8.6",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "googleapis": "^171.4.0",
-    "mongoose": "^8.22.0",
-    "multer": "^2.1.1",
-    "nodemailer": "^7.0.13",
-    "request": "^2.88.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
     "sharp": "^0.34.5",
-    "socket.io": "^4.8.3",
-    "tslib": "^2.8.1"
+    "dotenv": "^17.2.3",
+    "mongoose": "^8.21.0",
+    "request": "^2.88.2"
   }
 }

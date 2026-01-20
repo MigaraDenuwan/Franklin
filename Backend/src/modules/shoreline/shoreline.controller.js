@@ -24,14 +24,6 @@ import { DATA_DIR, BOUNDARY_FILE, NESTS_FILE } from "./config/paths.js";
 // ✅ MongoDB Alert model
 import Alert from "./models/alert.model.js";
 
-// ✅ Socket.IO (realtime)
-import { io } from "../../server.js";
-
-// ✅ Environment (API + manual fallback)
-import { getCurrentEnvironment } from "../environment/services/environment.service.js";
-import { environmentScore } from "./services/environmentRisk.service.js";
-import { notifyIfAllowed } from "./services/shorelineNotify.service.js";
-
 // ✅ python base url
 const PY_INFER_URL = process.env.PY_INFER_URL || "http://localhost:9000";
 
@@ -65,9 +57,9 @@ function ensureDefaults() {
   const nests = readJson(NESTS_FILE, null);
   if (!Array.isArray(nests)) {
     writeJson(NESTS_FILE, [
-      { id: "nest-1", label: "Nest #234", x: 10, y: 46 }, // red
-      { id: "nest-2", label: "Nest #189", x: 18, y: 48 }, // orange
-      { id: "nest-3", label: "Nest #201", x: 70, y: 60 }, // green
+      { id: "nest-1", label: "Nest #234", x: 25, y: 40 },
+      { id: "nest-2", label: "Nest #189", x: 45, y: 55 },
+      { id: "nest-3", label: "Nest #201", x: 80, y: 60 },
     ]);
   }
 }
@@ -273,83 +265,15 @@ export async function evaluateOffline(req, res) {
       bufferPct,
     });
 
-    console.log("IMG META:", { imgW, imgH });
-    console.log("BUFFER:", bufferPct);
-    console.log("FIRST SHORELINE PCT:", shorelinePct?.slice(0, 5));
-
-    const withD = evaluation.nestsEvaluated || evaluation.nestsAtRisk || [];
-    console.log(
-      "NEST DISTANCES:",
-      withD.map((n) => ({
-        id: n.id,
-        label: n.label,
-        x: n.x,
-        y: n.y,
-        d: n.distancePct,
-      })),
-    );
-
     console.log("RISK EVALUATION RESULT:", {
       riskLevel: evaluation.riskLevel,
       boundaryCrossed: evaluation.boundaryCrossed,
       nestsAtRisk: evaluation.nestsAtRisk?.length,
     });
 
-    // 6) ✅ get environment (API preferred, fallback manual)
-    let environment = null;
-    let envScore = 0;
-
-    try {
-      environment = await getCurrentEnvironment();
-      envScore = environmentScore(environment);
-    } catch (err) {
-      console.warn(
-        "Environment fetch failed, continuing without env:",
-        err?.message || err,
-      );
-      environment = {
-        source: "manual",
-        quality: "unknown",
-        observedAt: new Date(),
-        tide: { height_m: null, trend: "unknown", nextHighTideAt: null },
-        rain: { last3h_mm: null, next6h_mm: null },
-      };
-      envScore = 0;
-    }
-
-    // 7) ✅ final risk fusion (simple + explainable)
-    // Vision dominates, environment amplifies urgency.
-    const visionScore = evaluation.boundaryCrossed
-      ? 80
-      : (evaluation.nestsAtRisk?.length || 0) > 0
-        ? 60
-        : 10;
-
-    const finalScore = visionScore + envScore;
-
-    const finalRisk =
-      finalScore >= 80 ? "high" : finalScore >= 40 ? "medium" : "low";
-
-    const riskNotes = [];
-    if (envScore >= 15)
-      riskNotes.push("Environmental conditions amplify risk.");
-    if (environment?.rain?.last3h_mm >= 20)
-      riskNotes.push("Heavy recent rainfall detected.");
-    if (environment?.tide?.trend === "rising")
-      riskNotes.push("Tide is rising.");
-
-    // 8) ✅ Save + realtime push if HIGH (final risk)
-    let createdAlert = null;
-
-    if (finalRisk === "high") {
-      const baseKey = evaluation.boundaryCrossed
-        ? "shoreline_boundary_crossed"
-        : "shoreline_nests_at_risk";
-
-      const userId = req.auth?.userId || "anon"; // 👈 logged-in user
-      const cooldownKey = `${userId}_${baseKey}`; // 👈 per-user cooldown
-
-      createdAlert = await Alert.create({
+    // ✅ Save HIGH risk alerts into MongoDB (instead of alerts.json)
+    if (evaluation.riskLevel === "high") {
+      await Alert.create({
         type: "shoreline",
         riskLevel: "high",
         message: evaluation.boundaryCrossed
@@ -357,51 +281,21 @@ export async function evaluateOffline(req, res) {
           : "Shoreline close to turtle nests",
         status: "new",
         source: "offline_image",
-        cooldownKey, // ✅ UPDATED HERE
         details: {
           evaluation,
           bufferPct,
           boundary,
-          nests: evaluation.nestsEvaluated || nests,
-          nestsAtRiskCount:
-            evaluation.nestsAtRiskCount ?? evaluation.nestsAtRisk?.length ?? 0,
+          nests,
           shoreline: shorelinePct,
           image: { w: imgW, h: imgH },
           model: {
             shoreline_conf: body.shoreline_conf ?? null,
             notes: body.notes ?? null,
           },
-          environment,
-          envScore,
-          visionScore,
-          finalScore,
-          finalRisk,
-          riskNotes,
         },
       });
-
-      // ✅ realtime notify dashboards
-      try {
-        io.emit("shoreline:new_alert", createdAlert);
-      } catch (e) {
-        console.warn("Socket emit failed:", e?.message || e);
-      }
-      // ✅ EMAIL notify (send to logged-in user's email)
-      try {
-        const userId = req.auth?.userId || req.userId || null;
-        const userEmail = await getUserPrimaryEmail(userId);
-
-        const emailResult = await notifyIfAllowed({
-          alertDoc: createdAlert,
-          recipients: userEmail ? [userEmail] : [], // override
-        });
-
-        console.log("Email notify result:", emailResult, { userEmail, userId });
-      } catch (e) {
-        console.warn("Email notify failed:", e?.message || e);
-      }
     }
-    // 9) response includes environment + fused risk
+
     return res.json({
       mode: "offline",
       image: { w: imgW, h: imgH },
