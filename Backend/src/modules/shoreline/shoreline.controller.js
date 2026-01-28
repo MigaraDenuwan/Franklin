@@ -24,6 +24,13 @@ import { DATA_DIR, BOUNDARY_FILE, NESTS_FILE } from "./config/paths.js";
 // ✅ MongoDB Alert model
 import Alert from "./models/alert.model.js";
 
+// ✅ Socket.IO (realtime)
+import { io } from "../../server.js";
+
+// ✅ Environment (API + manual fallback)
+import { getCurrentEnvironment } from "../environment/services/environment.service.js";
+import { environmentScore } from "./services/environmentRisk.service.js";
+
 // ✅ python base url
 const PY_INFER_URL = process.env.PY_INFER_URL || "http://localhost:9000";
 
@@ -271,9 +278,54 @@ export async function evaluateOffline(req, res) {
       nestsAtRisk: evaluation.nestsAtRisk?.length,
     });
 
-    // ✅ Save HIGH risk alerts into MongoDB (instead of alerts.json)
-    if (evaluation.riskLevel === "high") {
-      await Alert.create({
+    // 6) ✅ get environment (API preferred, fallback manual)
+    let environment = null;
+    let envScore = 0;
+
+    try {
+      environment = await getCurrentEnvironment();
+      envScore = environmentScore(environment);
+    } catch (err) {
+      console.warn(
+        "Environment fetch failed, continuing without env:",
+        err?.message || err,
+      );
+      environment = {
+        source: "manual",
+        quality: "unknown",
+        observedAt: new Date(),
+        tide: { height_m: null, trend: "unknown", nextHighTideAt: null },
+        rain: { last3h_mm: null, next6h_mm: null },
+      };
+      envScore = 0;
+    }
+
+    // 7) ✅ final risk fusion (simple + explainable)
+    // Vision dominates, environment amplifies urgency.
+    const visionScore = evaluation.boundaryCrossed
+      ? 80
+      : (evaluation.nestsAtRisk?.length || 0) > 0
+        ? 60
+        : 10;
+
+    const finalScore = visionScore + envScore;
+
+    const finalRisk =
+      finalScore >= 80 ? "high" : finalScore >= 40 ? "medium" : "low";
+
+    const riskNotes = [];
+    if (envScore >= 15)
+      riskNotes.push("Environmental conditions amplify risk.");
+    if (environment?.rain?.last3h_mm >= 20)
+      riskNotes.push("Heavy recent rainfall detected.");
+    if (environment?.tide?.trend === "rising")
+      riskNotes.push("Tide is rising.");
+
+    // 8) ✅ Save + realtime push if HIGH (final risk)
+    let createdAlert = null;
+
+    if (finalRisk === "high") {
+      createdAlert = await Alert.create({
         type: "shoreline",
         riskLevel: "high",
         message: evaluation.boundaryCrossed
@@ -292,10 +344,26 @@ export async function evaluateOffline(req, res) {
             shoreline_conf: body.shoreline_conf ?? null,
             notes: body.notes ?? null,
           },
+
+          // ✅ NEW: environment fusion
+          environment,
+          envScore,
+          visionScore,
+          finalScore,
+          finalRisk,
+          riskNotes,
         },
       });
+
+      // ✅ realtime notify dashboards
+      try {
+        io.emit("shoreline:new_alert", createdAlert);
+      } catch (e) {
+        console.warn("Socket emit failed:", e?.message || e);
+      }
     }
 
+    // 9) response includes environment + fused risk
     return res.json({
       mode: "offline",
       image: { w: imgW, h: imgH },

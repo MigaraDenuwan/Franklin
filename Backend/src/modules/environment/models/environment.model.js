@@ -24,7 +24,7 @@ const RainSchema = new mongoose.Schema(
 const EnvironmentReadingSchema = new mongoose.Schema(
   {
     source: { type: String, enum: ["api", "manual"], required: true },
-    station: { type: String, default: null },
+    station: { type: String, default: null }, // api station/city or beach name
     tide: { type: TideSchema, default: () => ({}) },
     rain: { type: RainSchema, default: () => ({}) },
     quality: {
@@ -32,15 +32,9 @@ const EnvironmentReadingSchema = new mongoose.Schema(
       enum: ["good", "estimated", "unknown"],
       default: "unknown",
     },
-    observedAt: { type: Date, default: Date.now },
+    observedAt: { type: Date, default: Date.now }, // when reading is valid
   },
   { timestamps: true },
-);
-
-// ✅ TTL index (auto-delete after 30 days)
-EnvironmentReadingSchema.index(
-  { observedAt: 1 },
-  { expireAfterSeconds: 60 * 60 * 24 * 30 },
 );
 
 export default mongoose.model("EnvironmentReading", EnvironmentReadingSchema);

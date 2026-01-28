@@ -11,10 +11,6 @@ import { connectDB } from "./config/db.js";
 import detectionsRoutes from "./modules/detections/detections.routes.js";
 import healthRoutes from "./modules/turtleHealth/health.routes.js";
 import environmentRoutes from "./modules/environment/environment.routes.js";
-import hatcheryRoutes from "./modules/hatchery/hatchery.routes.js";
-import alertsRoutes from "./modules/alerts/alerts.routes.js";
-import profileRoutes from "./modules/users/profile.routes.js";
-import cameraRoutes from "./modules/cameras/camera.routes.js";
 
 const app = express();
 
@@ -56,31 +52,11 @@ init();
 import path from "path";
 
 // Static Routes (Streaming)
-app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 app.use(
   "/streams",
   express.static(config.streamDir, {
-    setHeaders(res, filePath) {
+    setHeaders(res) {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Range, Authorization, Content-Type",
-      );
-      res.setHeader(
-        "Access-Control-Expose-Headers",
-        "Content-Length, Content-Range",
-      );
-
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-
-      // Ensure correct MIME types for HLS
-      if (filePath.endsWith(".m3u8")) {
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      } else if (filePath.endsWith(".ts")) {
-        res.setHeader("Content-Type", "video/mp2t");
-      }
     },
   }),
 );
@@ -92,21 +68,17 @@ app.use("/api/nests", nestsRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/detections", detectionsRoutes);
 app.use("/api/health", healthRoutes);
+app.use("/api/streaming", streamingRoutes);
+app.use("/api/turtles", turtlesRoutes);
+app.use("/api/nests", nestsRoutes);
+app.use("/api/users", usersRoutes);
+app.use("/api/detections", detectionsRoutes);
+app.use("/api/health", healthRoutes);
 app.use("/api/shoreline", shorelineRoutes);
 app.use("/api/environment", environmentRoutes);
-app.use("/api/hatchery", hatcheryRoutes);
-app.use("/api/alerts", alertsRoutes);
-app.use("/api/profile", profileRoutes);
-app.use("/api/cameras", cameraRoutes);
-
-// Health route
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK", timestamp: new Date() });
-});
-
 // Root route
 app.get("/", (req, res) => {
-  res.send(`Franklin Conservation Backend Running (Port ${config.port})`);
+  res.send("Franklin Conservation Backend Running (Port 5000)");
 });
 
 export default app;
