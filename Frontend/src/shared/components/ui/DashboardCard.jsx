@@ -13,7 +13,9 @@ export default function DashboardCard({
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4 gap-3">
           <div className="flex items-center gap-3">
-            <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+            <h3 className="text-base font-bold text-gray-800 dark:text-white">
+              {title}
+            </h3>
 
             {/* ✅ only render icon when provided */}
             {Icon ? (
