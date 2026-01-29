@@ -2,9 +2,16 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { config } from '../../config/env.js';
-import { Camera } from '../cameras/camera.model.js';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-const ffmpegPath = ffmpegInstaller.path;
+import { Camera } from '../cameras/camera.model.js';
+
+let ffmpegPath;
+try {
+    ffmpegPath = ffmpegInstaller.path;
+} catch (e) {
+    ffmpegPath = 'ffmpeg'; // fallback to system ffmpeg
+}
+console.log(`[Streaming] FFmpeg path: ${ffmpegPath}`);
 
 class StreamingService {
     constructor() {
@@ -12,7 +19,7 @@ class StreamingService {
         this.ensureStreamDir();
     }
 
-    ensureStreamDir() {
+    init() {
         if (!fs.existsSync(config.streamDir)) {
             fs.mkdirSync(config.streamDir, { recursive: true });
         }
@@ -20,163 +27,111 @@ class StreamingService {
 
     async startAllCameras() {
         try {
+            console.log('[Streaming] Starting all enabled cameras from DB...');
             const cameras = await Camera.find({ isEnabled: true });
-            console.log(`Starting ${cameras.length} cameras...`);
-            for (const camera of cameras) {
-                this.startCamera({
-                    id: camera._id.toString(),
-                    rtspUrl: camera.rtspUrl
-                });
+            for (const cam of cameras) {
+                this.startCamera({ id: cam._id.toString(), rtspUrl: cam.rtspUrl });
             }
         } catch (error) {
-            console.error('Error starting all cameras:', error);
+            console.error('[Streaming] Start all error:', error);
         }
     }
 
-    startCamera({ id, rtspUrl }) {
-        if (this.processes.has(id)) {
-            console.log(`Camera ${id} is already streaming.`);
-            return;
-        }
+    startCamera(cam) {
+        if (this.processes.has(cam.id)) return;
 
-        const cameraDir = path.join(config.streamDir, id);
-        if (!fs.existsSync(cameraDir)) {
-            fs.mkdirSync(cameraDir, { recursive: true });
-        }
+        const outDir = path.join(config.streamDir, cam.id);
+        if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+        const outPath = path.join(outDir, 'stream.m3u8');
 
-        const playlistPath = path.join(cameraDir, 'stream.m3u8');
-
-        // FFmpeg command to convert input to HLS
-        const isRtsp = rtspUrl.startsWith('rtsp://');
-        const ffmpegArgs = [];
-
-        // For local files, read at native frame rate to simulate a stream
-        if (!isRtsp) {
-            ffmpegArgs.push('-re');
-        } else {
-            ffmpegArgs.push(
-                '-rtsp_transport', 'tcp',
-                '-rtsp_flags', 'prefer_tcp',
-                '-fflags', 'nobuffer+genpts',
-                '-use_wallclock_as_timestamps', '1',
-                '-probesize', '32768',
-                '-analyzeduration', '0'
-            );
-        }
-
-        // Use forward slashes for FFmpeg paths even on Windows
-        const normalizedInput = rtspUrl.replace(/\\/g, '/');
-        const normalizedSegmentPattern = path.join(cameraDir, 'p%d.ts').replace(/\\/g, '/');
-        const normalizedPlaylist = playlistPath.replace(/\\/g, '/');
-
-        ffmpegArgs.push(
-            '-i', normalizedInput,
+        // Audio-enabled FFmpeg arguments
+        const args = [
+            '-rtsp_transport', 'tcp',
+            '-i', cam.rtspUrl,
+            '-map', '0:v:0',      // Map first video stream
+            '-map', '0:a:0?',     // Map first audio stream if it exists
             '-c:v', 'libx264',
             '-profile:v', 'baseline',
             '-level', '3.0',
             '-preset', 'ultrafast',
             '-tune', 'zerolatency',
-            '-vf', 'scale=-2:480,format=yuv420p',
-            '-g', '30',
-            '-force_key_frames', 'expr:gte(t,n_forced*1)',
-            '-sc_threshold', '0',
-            '-c:a', 'aac',
-            '-ar', '44100',
-            '-ac', '2',
-            '-b:a', '128k',
+            '-g', '50',
+            '-c:a', 'aac',        // Encode audio to AAC
+            '-b:a', '128k',       // Audio bitrate
+            '-ar', '44100',       // Audio sample rate
+            '-ac', '2',            // Stereo audio
             '-f', 'hls',
-            '-hls_time', '1',
-            '-hls_list_size', '3',
-            '-hls_flags', 'delete_segments+independent_segments+omit_endlist+discont_start',
+            '-hls_time', '4',
+            '-hls_list_size', '5',
+            '-hls_flags', 'delete_segments+append_list+independent_segments',
+            '-hls_segment_type', 'mpegts',
             '-hls_allow_cache', '0',
             '-hls_segment_filename', `file:${normalizedSegmentPattern}`,
             `file:${normalizedPlaylist}`
         );
 
-        console.log(`[Camera ${id}] Source: ${normalizedInput}`);
-        console.log(`[Camera ${id}] Executing: ${ffmpegPath} ${ffmpegArgs.join(' ')}`);
-        const process = spawn(ffmpegPath, ffmpegArgs);
+        const startProcess = () => {
+            console.log(`[Streaming] Starting FFmpeg process for ${cam.id}`);
+            const ff = spawn(ffmpegPath, args);
 
-        process.stdout.on('data', (data) => {
-            // console.log(`[Camera ${id}] stdout: ${data}`);
-        });
+            ff.stderr.on('data', d => {
+                const msg = d.toString();
 
-        process.stderr.on('data', (data) => {
-            // Log only critical errors or performance issues to avoid spamming
-            const msg = data.toString();
-            if (msg.includes('Error') || msg.includes('speed=')) {
-                console.error(`[Camera ${id}] info: ${msg.trim()}`);
-            }
-        });
-
-        process.on('close', (code) => {
-            const entry = this.processes.get(id);
-            const wasStopping = entry?.isStopping;
-
-            console.log(`[Camera ${id}] ffmpeg process exited with code ${code}${wasStopping ? ' (Manual Stop)' : ''}`);
-            this.processes.delete(id);
-
-            // Auto-restart logic for "always on" streaming - skip if manually stopping
-            if (!wasStopping) {
-                if (code !== null && code !== 0) {
-                    console.warn(`[Camera ${id}] Unexpected exit. Restarting in 5 seconds...`);
-                    setTimeout(() => {
-                        this.startCamera({ id, rtspUrl });
-                    }, 5000);
-                } else if (code === 0) {
-                    console.log(`[Camera ${id}] Process ended. Restarting to ensure "always on" stream...`);
-                    setTimeout(() => {
-                        this.startCamera({ id, rtspUrl });
-                    }, 1000);
+                // Audio detection logging
+                if (msg.includes('Audio:')) {
+                    console.log(`[Streaming Info ${cam.id}] Audio stream detected and being processed.`);
                 }
-            }
-        });
 
-        this.processes.set(id, {
-            process,
-            startTime: new Date(),
-            rtspUrl,
-            isStopping: false
-        });
+                if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) {
+                    console.error(`[FFmpeg Error ${cam.id}] ${msg.trim()}`);
+                }
+            });
+
+            ff.on('exit', (code, signal) => {
+                if (signal === 'SIGTERM' || signal === 'SIGINT') {
+                    console.log(`[Streaming] ${cam.id} process terminated manually.`);
+                    return;
+                }
+                console.warn(`[Streaming] ${cam.id} process exited with code ${code}. Restarting in 1s...`);
+                const timeout = setTimeout(startProcess, 1000);
+                this.processes.set(cam.id, { process: null, restartTimeout: timeout });
+            });
+
+            this.processes.set(cam.id, { process: ff, restartTimeout: null });
+        };
+
+        startProcess();
     }
 
-    stopCamera(id) {
-        const cameraProcess = this.processes.get(id);
-        if (cameraProcess) {
-            console.log(`Stopping streaming for camera ${id}...`);
-            cameraProcess.isStopping = true; // Mark as intentional stop
-            cameraProcess.process.kill('SIGTERM');
-            // Entry will be deleted in the 'close' event handler
+    stopCamera(cameraId) {
+        const entry = this.processes.get(cameraId);
+        if (entry) {
+            if (entry.restartTimeout) clearTimeout(entry.restartTimeout);
+            if (entry.process) entry.process.kill('SIGTERM');
+            this.processes.delete(cameraId);
+
+            // Cleanup HLS files
+            const camDir = path.join(config.streamDir, cameraId);
+            if (fs.existsSync(camDir)) {
+                fs.rmSync(camDir, { recursive: true, force: true });
+                console.log(`[Streaming] Cleaned up stream folder for ${cameraId}`);
+            }
         }
     }
 
-    getStatus() {
-        const status = [];
-        this.processes.forEach((value, key) => {
-            status.push({
-                id: key,
-                startTime: value.startTime,
-                rtspUrl: value.rtspUrl,
-                active: true
-            });
-        });
-        return status;
+    getStreamPath(cameraId) {
+        return path.join(config.streamDir, cameraId, 'stream.m3u8');
     }
 
-    getHealth(id) {
-        const cameraProcess = this.processes.get(id);
-        if (!cameraProcess) return { active: false };
-
-        const cameraDir = path.join(config.streamDir, id);
-        const playlistPath = path.join(cameraDir, 'stream.m3u8');
-        const exists = fs.existsSync(playlistPath);
-
-        return {
-            active: true,
-            startTime: cameraProcess.startTime,
-            playlistExists: exists,
-            lastUpdate: exists ? fs.statSync(playlistPath).mtime : null
-        };
+    getStreamingStatus() {
+        const statuses = [];
+        this.processes.forEach((val, key) => {
+            statuses.push({
+                cameraId: key,
+                status: val.process ? 'active' : 'restarting'
+            });
+        });
+        return statuses;
     }
 }
 

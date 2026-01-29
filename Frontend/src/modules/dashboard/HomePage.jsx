@@ -1,33 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Activity, Video, MapPin, Droplets, AlertCircle, Loader2, Info, ArrowUpRight, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Activity, Video, MapPin, Droplets, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
 import axios from 'axios';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 import DashboardCard from '../../shared/components/ui/DashboardCard';
 import HlsPlayer from '../../shared/components/media/HlsPlayer';
 import StatSummaryCard from '../../shared/components/ui/StatSummaryCard';
 import Button from '../../shared/components/ui/Button';
 import { API_BASE_URL } from '../../shared/config';
 
-export default function HomePage({ onTabChange }) {
+export default function HomePage() {
   const { getToken } = useAuth();
-  const { user } = useUser();
   const [mainCamera, setMainCamera] = useState(null);
-  const [healthStats, setHealthStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const API_BASE = API_BASE_URL.replace(/\/api$/, '');
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002';
 
   useEffect(() => {
-    const fetchAllData = async () => {
-      setLoading(true);
-      await Promise.allSettled([
-        fetchMainCamera(),
-        fetchSystemData()
-      ]);
-      setLoading(false);
-    };
-    fetchAllData();
-  }, [getToken]);
+    fetchMainCamera();
+  }, []);
 
   const fetchMainCamera = async () => {
     try {
@@ -36,31 +26,18 @@ export default function HomePage({ onTabChange }) {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data.success) {
-        // Strictly find "Main Camera" by flag or name
-        const main = res.data.data.find(c =>
-          (c.isMain || c.name.toLowerCase() === 'main camera') && c.isEnabled
-        );
-        setMainCamera(main || null);
+        const main = res.data.data.find(c => c.isMain && c.isEnabled);
+        setMainCamera(main);
       }
     } catch (error) {
       console.error('[HomePage] Camera fetch error:', error);
-    }
-  };
-
-  const fetchSystemData = async () => {
-    try {
-      const token = await getToken();
-      const res = await axios.get(`${API_BASE}/api/health/stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setHealthStats(res.data);
-    } catch (error) {
-      console.error('[HomePage] System data fetch error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const streamUrl = mainCamera
-    ? `${API_BASE_URL.replace(/\/api$/, '')}/streams/${mainCamera._id}/stream.m3u8`
+    ? `${API_BASE}/streams/${mainCamera._id}/stream.m3u8`
     : null;
 
   return (
@@ -81,7 +58,7 @@ export default function HomePage({ onTabChange }) {
           icon={Activity}
           value="127"
           label="Turtles Monitored"
-          subtext="↑ 12% this week"
+          stat="↑ 12%"
           colorTheme="blue"
           className=""
         />
@@ -89,7 +66,7 @@ export default function HomePage({ onTabChange }) {
           icon={Video}
           value="43"
           label="Active Nests"
-          subtext="8 protected today"
+          stat="8 new"
           colorTheme="teal"
           className="delay-75"
         />
@@ -97,7 +74,7 @@ export default function HomePage({ onTabChange }) {
           icon={AlertCircle}
           value="5"
           label="Active Alerts"
-          subtext="3 require attention"
+          stat="3 priority"
           colorTheme="amber"
           className="delay-150"
         />
@@ -105,7 +82,7 @@ export default function HomePage({ onTabChange }) {
           icon={Droplets}
           value="234"
           label="Hatchlings Tracked"
-          subtext="↑ 18% vs last month"
+          stat="↑ 18%"
           colorTheme="purple"
           className="delay-200"
         />
@@ -184,122 +161,130 @@ export default function HomePage({ onTabChange }) {
                   <Activity className="w-6 h-6 text-cyan-500" />
                 </div>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-bold tracking-wider uppercase mb-1.5 block">Threats Detected</span>
-                  <div className="flex items-end gap-2.5">
-                    <span className="font-black text-3xl text-slate-900 dark:text-white leading-none">3</span>
-                    <span className="text-[10px] font-black text-rose-50 bg-rose-500 dark:text-rose-200 dark:bg-rose-600/80 px-2 py-0.5 rounded-full mb-0.5 tracking-wider uppercase shadow-sm">Active</span>
-                  </div>
-                </div>
-                <div className="bg-white dark:bg-slate-700/50 p-3 rounded-xl shadow-sm group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300 border border-slate-100 dark:border-transparent">
-                  <AlertCircle className="w-6 h-6 text-rose-500" />
+            </div>
+          </div>
+          <Button className="mt-4 w-full text-xs font-bold uppercase tracking-wider">
+            Diagnostics Hub
+          </Button>
+        </DashboardCard>
+
+        <DashboardCard
+          title="Nest Monitoring & Predators"
+          icon={Video}
+          iconColor="text-teal-600"
+          iconBg="bg-teal-100 dark:bg-teal-900/30"
+          action={mainCamera && <div className="text-[10px] font-black bg-cyan-500 text-white px-2 py-1 rounded uppercase tracking-tighter">Main Feed</div>}
+        >
+          <div className="mb-4 bg-gray-900 rounded-2xl overflow-hidden aspect-video relative shadow-inner border border-gray-200 dark:border-slate-800 transition-all hover:shadow-2xl hover:scale-[1.01]">
+            {loading ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+              </div>
+            ) : streamUrl ? (
+              <HlsPlayer
+                src={streamUrl}
+                className="w-full h-full"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 space-y-2 bg-slate-950">
+                <Video className="h-10 w-10 opacity-20" />
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-40">No Main Camera Configured</p>
+                <p className="text-[9px] opacity-40 italic">Set a camera as "Main Camera" in Profile</p>
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-gray-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
+              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Global Nests</span>
+              <span className="font-bold text-gray-900 dark:text-white">43</span>
+            </div>
+            <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-gray-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
+              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Predator Alert</span>
+              <span className="font-bold text-red-600">Active</span>
+            </div>
+          </div>
+          <Button variant="success" className="mt-4 w-full text-xs font-bold uppercase tracking-wider">
+            Live Intelligence
+          </Button>
+        </DashboardCard>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <DashboardCard
+          title="Shoreline Risk Assessment"
+          icon={MapPin}
+          iconColor="text-orange-600"
+          iconBg="bg-orange-100 dark:bg-orange-900/30"
+        >
+          <div className="mb-4 bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-slate-800 dark:to-slate-900 rounded-xl h-48 relative overflow-hidden group">
+            <div className="absolute inset-0 flex items-center justify-center transition-transform group-hover:scale-110 duration-500">
+              <MapPin className="h-16 w-16 text-cyan-600/30" />
+            </div>
+            <div className="absolute bottom-3 left-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-white/20">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-black uppercase tracking-widest text-gray-700 dark:text-gray-200">High Risk Zones</span>
+                <span className="bg-red-500 text-white px-2 py-1 rounded font-black text-[10px]">04</span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-2 text-center border border-red-100 dark:border-red-900/40">
+              <p className="text-[9px] text-red-600 dark:text-red-400 font-black uppercase">Critical</p>
+              <p className="text-xl font-black text-red-700 dark:text-red-500">4</p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-2 text-center border border-amber-100 dark:border-amber-900/40">
+              <p className="text-[9px] text-amber-600 dark:text-amber-400 font-black uppercase">Warning</p>
+              <p className="text-xl font-black text-amber-700 dark:text-amber-500">7</p>
+            </div>
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-2 text-center border border-green-100 dark:border-green-900/40">
+              <p className="text-[9px] text-green-600 dark:text-green-400 font-black uppercase">Stable</p>
+              <p className="text-xl font-black text-green-700 dark:text-green-500">32</p>
+            </div>
+          </div>
+          <Button variant="warning" className="mt-4 w-full text-white text-xs font-bold uppercase tracking-wider">
+            Risk Intel Map
+          </Button>
+        </DashboardCard>
+
+        <DashboardCard
+          title="Hatchery Monitoring"
+          icon={Droplets}
+          iconColor="text-purple-600"
+          iconBg="bg-purple-100 dark:bg-purple-900/30"
+        >
+          <div className="space-y-3 mb-4">
+            <div className="space-y-3">
+              <div className="bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all">
+                <p className="text-[10px] uppercase font-black text-gray-500 dark:text-gray-400 tracking-widest">Hatchlings Sync</p>
+                <div className="flex items-end justify-between mt-1">
+                  <h4 className="text-2xl font-black text-gray-900 dark:text-white">234</h4>
+                  <span className="text-[10px] font-black text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full">+12 Today</span>
                 </div>
               </div>
             </div>
-
-            {/* <div className="mt-6">
-              <Button className="w-full bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 border-none shadow-lg shadow-teal-500/25 text-white font-bold tracking-widest uppercase group py-4">
-                Open Live Intelligence <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </div> */}
-            <Button
-              variant="secondary"
-              className="w-full mt-6 text-xs font-bold uppercase tracking-widest group hover:border-slate-300 dark:hover:border-slate-600 py-3.5"
-              onClick={() => onTabChange && onTabChange('nests')}
-            >
-              Open Live Intelligence <ArrowRight className="w-4 h-4 ml-1.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-            </Button>
-          </DashboardCard>
-
-        </div>
-
-        {/* Right Column (1/3 width) - Secondary Data */}
-        <div className="space-y-8">
-
-          {/* Health Mini Card */}
-          <DashboardCard
-            title="Health Diagnostics"
-            icon={Activity}
-            iconColor="text-blue-500"
-            iconBg="bg-blue-500/10 dark:bg-blue-500/20"
-          >
-            <div className="flex flex-col gap-3.5 mt-2">
-              {[
-                { label: 'FP Cases Detected', value: healthStats?.stats?.fp?.count || 0, status: `${healthStats?.stats?.fp?.percentage || 0}% of all cases`, color: 'text-amber-500 text-amber-600', bg: 'bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20' },
-                { label: 'Barnacle Infestation', value: healthStats?.stats?.barnacles?.count || 0, status: `${healthStats?.stats?.barnacles?.percentage || 0}% of all cases`, color: 'text-emerald-500 text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20' },
-                { label: 'Clear Scans', value: healthStats?.stats?.healthy?.count || 0, status: `${healthStats?.stats?.healthy?.percentage || 0}% success rate`, color: 'text-blue-500 text-blue-600', bg: 'bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20' },
-              ].map((item, i) => (
-                <div key={i} className="group relative bg-white dark:bg-slate-800/40 p-4.5 py-4 px-5 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-between cursor-default">
-                  <div className="absolute inset-0 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-700/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl"></div>
-                  <div className="relative z-10">
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{item.label}</span>
-                    <p className={`text-[11px] mt-1.5 font-bold uppercase tracking-wider ${item.color.split(' ')[0]} opacity-80`}>{item.status}</p>
-                  </div>
-                  <div className={`w-12 h-12 rounded-xl border ${item.bg} flex items-center justify-center relative z-10 shadow-inner group-hover:scale-105 transition-transform`}>
-                    <span className={`font-black text-xl ${item.color.split(' ')[1]}`}>{item.value}</span>
-                  </div>
-                </div>
-              ))}
+          </div>
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-slate-800 dark:to-slate-900 rounded-xl p-4 border border-purple-100 dark:border-purple-900/20">
+            <div className="flex items-center justify-between mb-3 text-xs font-black uppercase tracking-widest text-purple-600">
+              <span>Genus Distro</span>
+              <TrendingUp className="h-4 w-4" />
             </div>
-
-            <Button
-              variant="secondary"
-              className="w-full mt-6 text-xs font-bold uppercase tracking-widest group hover:border-slate-300 dark:hover:border-slate-600 py-3.5"
-              onClick={() => onTabChange && onTabChange('health')}
-            >
-              Open Health Center <ArrowRight className="w-4 h-4 ml-1.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-            </Button>
-          </DashboardCard>
-
-          {/* Shoreline Risk */}
-          <DashboardCard
-            title="Shoreline Risk Level"
-            icon={MapPin}
-            iconColor="text-orange-500"
-            iconBg="bg-orange-500/10 dark:bg-orange-500/20"
-          >
-            <div className="mt-2 relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-6 shadow-inner group cursor-pointer border border-slate-700">
-              {/* Decorative map background */}
-              <div className="absolute right-0 bottom-0 opacity-10 group-hover:opacity-20 transition-opacity duration-700 group-hover:scale-110 pointer-events-none translate-x-4 translate-y-4">
-                <svg className="w-40 h-40 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-
-              <div className="relative z-10 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-orange-400 mb-1.5">Current Status</p>
-                  <p className="text-3xl font-black text-white drop-shadow-md">Moderate</p>
-                  <div className="flex items-center gap-1.5 mt-3 text-orange-200/70 text-xs font-semibold bg-orange-900/30 px-2 py-1 rounded-md border border-orange-500/20 w-max backdrop-blur-sm">
-                    <Info className="w-3.5 h-3.5 text-orange-400" /> Area 4 approaches high runup
-                  </div>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between text-[10px] font-bold mb-1">
+                  <span className="text-gray-600 dark:text-gray-400">Loggerhead</span>
+                  <span className="text-gray-900 dark:text-white">45%</span>
                 </div>
-
-                <div className="flex flex-col gap-1 items-end">
-                  <div className="w-2.5 h-12 rounded-full bg-slate-800 shadow-inner border border-slate-700 flex flex-col justify-end overflow-hidden">
-                    <div className="w-full h-[65%] bg-gradient-to-t from-orange-600 to-orange-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(251,146,60,0.5)]"></div>
-                  </div>
+                <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-purple-500 h-full rounded-full transition-all duration-1000" style={{ width: '45%' }}></div>
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-4 mt-5">
-              <div className="bg-orange-50/50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 p-4 rounded-xl flex flex-col items-center justify-center shadow-sm">
-                <span className="text-[10px] font-black uppercase text-orange-600 dark:text-orange-400 tracking-widest mb-1.5">High Risk</span>
-                <span className="text-2xl font-black text-orange-700 dark:text-orange-300 drop-shadow-sm">4</span>
-              </div>
-              <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 p-4 rounded-xl flex flex-col items-center justify-center shadow-sm">
-                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest mb-1.5">Stable</span>
-                <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 drop-shadow-sm">32</span>
-              </div>
-            </div>
-            <Button variant="secondary" className="w-full mt-6 text-xs font-bold uppercase tracking-widest group hover:border-slate-300 dark:hover:border-slate-600 py-3.5">
-              View Intel Map <ArrowRight className="w-4 h-4 ml-1.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-            </Button>
-          </DashboardCard>
-
-        </div>
+          <Button variant="purple" className="mt-4 w-full text-xs font-bold uppercase tracking-wider">
+            Biological Analytics
+          </Button>
+        </DashboardCard>
       </div>
 
     </div>

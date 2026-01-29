@@ -9,8 +9,6 @@ import Button from '../../shared/components/ui/Button';
 import SimulationUpload from './SimulationUpload';
 import { useUser } from '@clerk/clerk-react';
 import CameraSelector from '../../shared/components/media/CameraSelector';
-import { API_BASE_URL, UNIFIED_MODEL_URL } from '../../shared/config';
-import { Brain } from 'lucide-react';
 
 const MOCK_NESTS = [
   { nestNo: 'N001', x: 25, y: 50, locationName: 'Zone A', createdAt: '2026-01-26 10:00:00', status: 'safe' },
@@ -24,7 +22,7 @@ export default function NestMonitoringPage() {
   const { user, isLoaded: userLoaded } = useUser();
   const [simulationData, setSimulationData] = useState(null);
   const [activeCamera, setActiveCamera] = useState(null);
-  const [simulationEntities, setSimulationEntities] = useState([]);
+  const [simulationEntities, setSimulationEntities] = useState(null);
   const [detectionHistory, setDetectionHistory] = useState([]);
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [showDangerModal, setShowDangerModal] = useState(null);
@@ -51,12 +49,14 @@ export default function NestMonitoringPage() {
   const RADIUS_THRESHOLD = 15;
 
   const streamUrl = activeCamera
-    ? isAiMode
-      ? `${UNIFIED_MODEL_URL}/ai/unified/stream?source=${activeCamera.rtspUrl}`
-      : `${API_BASE_URL.replace(/\/api$/, '')}/streams/${activeCamera._id}/stream.m3u8`
+    ? `${import.meta.env.VITE_API_BASE_URL}/streams/${activeCamera._id}/stream.m3u8`
     : null;
 
-  // --- HELPER FUNCTIONS ---
+  useEffect(() => {
+    const socket = io(import.meta.env.VITE_API_BASE_URL);
+    socket.on('danger_alert', (data) => console.log('Central Server Alert:', data));
+    return () => socket.disconnect();
+  }, []);
 
   const playSiren = useCallback(() => {
     if (sirenRef.current && !isSirenMuted) {
@@ -74,7 +74,7 @@ export default function NestMonitoringPage() {
   }, []);
 
   const fetchHistory = () => {
-    fetch(`${API_BASE_URL}/api/detections`)
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/detections`)
       .then(res => res.json())
       .then(res => { if (res.success) setDetectionHistory(res.data); })
       .catch(err => console.error("Failed to load history", err));
@@ -101,7 +101,7 @@ export default function NestMonitoringPage() {
     playSiren();
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/alerts/email`, {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/alerts/email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -433,14 +433,6 @@ export default function NestMonitoringPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsAiMode(!isAiMode)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border font-bold text-xs transition-all shadow-sm ${isAiMode ? 'bg-cyan-600 border-cyan-500 text-white animate-pulse' : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-400 hover:border-cyan-500'}`}
-          >
-            <Brain className={`h-4 w-4 ${isAiMode ? 'text-white' : 'text-cyan-500'}`} />
-            {isAiMode ? 'LIVE AI ACTIVE' : 'ENABLE LIVE AI'}
-          </button>
-
           <CameraSelector onSelect={setActiveCamera} activeCameraId={activeCamera?._id} />
 
           <div className="flex items-center bg-white dark:bg-slate-900 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800">
@@ -496,20 +488,11 @@ export default function NestMonitoringPage() {
               </div>
 
               {(simulationData || streamUrl) ? (
+              {(simulationData || streamUrl) ? (
                 <div className="xl:w-[380px] bg-gray-50 dark:bg-slate-800/20 p-4 space-y-4 border-l border-gray-100 dark:border-slate-800 flex flex-col">
                   <div className="bg-black rounded-2xl overflow-hidden shadow-xl aspect-video relative">
                     {simulationData ? (
                       <video ref={videoRef} src={simulationData.video_url} controls autoPlay className="w-full h-full object-cover" onTimeUpdate={handleTimeUpdate} />
-                    ) : isAiMode ? (
-                      <img
-                        src={streamUrl}
-                        className="w-full h-full object-contain bg-black"
-                        alt="Live AI Feed"
-                        onError={(e) => {
-                          console.error("AI Stream failed to load");
-                          setIsAiMode(false);
-                        }}
-                      />
                     ) : (
                       <HlsPlayer src={streamUrl} className="w-full h-full" />
                     )}
@@ -518,6 +501,7 @@ export default function NestMonitoringPage() {
                   <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 flex-1 space-y-4">
                     <h4 className="font-bold text-gray-900 dark:text-white uppercase text-[10px] tracking-wider flex items-center">
                       <BadgeCheck className="h-3 w-3 mr-2 text-teal-500" />
+                      {simulationData ? 'Simulation Statistics' : 'Live Monitor Stats'}
                       {simulationData ? 'Simulation Statistics' : 'Live Monitor Stats'}
                     </h4>
                     <div className="grid grid-cols-2 gap-3">
@@ -542,6 +526,11 @@ export default function NestMonitoringPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+              ) : (
+                <div className="xl:w-[380px] bg-gray-50 dark:bg-slate-800/20 p-4 space-y-4 border-l border-gray-100 dark:border-slate-800 flex flex-col items-center justify-center">
+                  <Video className="h-12 w-12 text-gray-300 mb-2" />
+                  <p className="text-gray-500 text-xs font-medium">Select a camera or upload simulation</p>
                 </div>
               ) : (
                 <div className="xl:w-[380px] bg-gray-50 dark:bg-slate-800/20 p-4 space-y-4 border-l border-gray-100 dark:border-slate-800 flex flex-col items-center justify-center">

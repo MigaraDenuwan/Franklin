@@ -10,6 +10,9 @@ import { API_BASE_URL } from '../../shared/config';
 import CameraSection from './CameraSection';
 
 
+import CameraSection from './CameraSection';
+
+
 export default function ProfilePage() {
   const { user, isLoaded: userLoaded } = useUser();
   const { getToken } = useAuth();
