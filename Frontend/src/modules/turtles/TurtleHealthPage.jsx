@@ -1,11 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { Upload, Activity, AlertCircle, CheckCircle, Image, X, MapPin, Camera, History, Plus, Stethoscope, Map } from 'lucide-react';
+import { Upload, Activity, AlertCircle, CheckCircle, Image, X, MapPin } from 'lucide-react';
 import DashboardCard from '../../shared/components/ui/DashboardCard';
 import Button from '../../shared/components/ui/Button';
 import GoogleMapPicker from '../../shared/components/maps/GoogleMapPicker';
-import DiseaseHotspotMap from './DiseaseHotspotMap';
-import { API_BASE_URL, DISEASE_MODEL_URL } from '../../shared/config';
 
 /* ───────────────────────── Stats sidebar → now horizontal row ───────────────────────── */
 function HealthStats({ refreshTrigger }) {
@@ -318,6 +315,7 @@ function DiagnosticModal({ isOpen, onClose, onDiagnosisComplete }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [location, setLocation] = useState(null);
+  const [location, setLocation] = useState(null);
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -416,16 +414,9 @@ function DiagnosticModal({ isOpen, onClose, onDiagnosisComplete }) {
   const analyzeImage = async () => {
     if (!selectedImage) return;
 
-    if (!confirmLocation) {
-      setValidationError("Please tick the checkbox to confirm your location before identifying the health status.");
-      return;
-    }
-    if (!location) {
-      setValidationError("Location coordinate tracking failed. Please allow location permissions or click on the map to pinpoint.");
-      return;
-    }
+    // Optional: Validate location
+    // if (!location) { alert("Please pin point the location first."); return; }
 
-    setValidationError("");
     setIsAnalyzing(true);
     setAnalysisResult(null);
 
@@ -452,10 +443,15 @@ function DiagnosticModal({ isOpen, onClose, onDiagnosisComplete }) {
 
       await fetch(`${API_BASE_URL}/api/health/save`, {
         method: 'POST',
-        body: saveFormData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          diagnosisClass: data.class,
+          confidence: data.confidence,
+          probabilities: data.probabilities,
+          location: location,
+          notes: 'Auto-saved from diagnostics'
+        })
       });
-
-      if (onDiagnosisComplete) onDiagnosisComplete();
     } catch (error) {
       console.error('Error analyzing image:', error);
       alert('Failed to analyze image. Ensure backend is running.');
@@ -529,24 +525,41 @@ function DiagnosticModal({ isOpen, onClose, onDiagnosisComplete }) {
                   <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-widest">Upload File</p>
                   <p className="text-[10px] text-gray-400 dark:text-gray-500">Choose from gallery</p>
                 </div>
-              </div>
-            )
-          ) : (
-            <div className="relative rounded-2xl overflow-hidden shadow-xl bg-gray-900 border border-gray-100 dark:border-slate-800 group">
-              <img src={previewUrl} alt="Preview" className="w-full h-56 object-contain" />
-              <div className="absolute top-3 right-3">
-                <button onClick={clearSelection} className="bg-red-500 hover:bg-red-600 p-2 rounded-lg text-white shadow-lg transition-all">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              {isAnalyzing && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center flex-col">
-                  <Activity className="h-10 w-10 text-blue-400 animate-pulse mb-3" />
-                  <p className="text-white text-xs font-black uppercase tracking-widest">Analyzing Biological Patterns...</p>
+              ) : (
+                <div className="relative rounded-2xl overflow-hidden shadow-xl bg-gray-900 border border-gray-100 dark:border-slate-800 group">
+                  <img src={previewUrl} alt="Preview" className="w-full h-72 object-contain" />
+                  <div className="absolute top-4 right-4 flex space-x-2">
+                    <button onClick={clearSelection} className="bg-red-500 hover:bg-red-600 p-2 rounded-lg text-white shadow-lg transition-all">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {!analysisResult && !isAnalyzing && (
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button onClick={analyzeImage} className="px-10 py-3 font-bold text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-2xl rounded-xl">
+                        Identify Health Status
+                      </Button>
+                    </div>
+                  )}
+                  {isAnalyzing && (
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center flex-col">
+                      <Activity className="h-10 w-10 text-blue-400 animate-pulse mb-3" />
+                      <p className="text-white text-xs font-black uppercase tracking-widest">Analyzing Biological Patterns...</p>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
+
+              {/* Location Picker */}
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <MapPin className="h-4 w-4 text-gray-500" />
+                  <p className="text-sm font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest">Location Pinpoint</p>
+                </div>
+                <div className="h-64 rounded-2xl overflow-hidden border border-gray-200 dark:border-slate-800 shadow-sm relative z-0">
+                  <GoogleMapPicker onLocationSelect={setLocation} />
+                </div>
+                {location && <p className="text-[10px] text-gray-400 text-right">Selected: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}</p>}
+              </div>
 
           {/* Location Picker */}
           <div className="space-y-3">

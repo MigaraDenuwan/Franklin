@@ -26,6 +26,10 @@ const turtleHealthSchema = new mongoose.Schema({
         lat: Number,
         lng: Number
     },
+    location: {
+        lat: Number,
+        lng: Number
+    },
     notes: String
 });
 
