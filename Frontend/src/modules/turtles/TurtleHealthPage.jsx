@@ -3,13 +3,14 @@ import { Upload, Activity, AlertCircle, CheckCircle, Image, X, MapPin } from 'lu
 import DashboardCard from '../../shared/components/ui/DashboardCard';
 import Button from '../../shared/components/ui/Button';
 import GoogleMapPicker from '../../shared/components/maps/GoogleMapPicker';
+import { API_BASE_URL, DISEASE_MODEL_URL } from '../../shared/config';
 
 /* ───────────────────────── Stats sidebar → now horizontal row ───────────────────────── */
 function HealthStats({ refreshTrigger }) {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/health/stats`)
+    fetch(`${API_BASE_URL}/health/stats`)
       .then(res => res.json())
       .then(data => setStats(data))
       .catch(err => console.error("Failed to fetch stats", err));
@@ -424,7 +425,7 @@ function DiagnosticModal({ isOpen, onClose, onDiagnosisComplete }) {
     formData.append('file', selectedImage);
 
     try {
-      const response = await fetch(getAiUrl('/ai/disease/classify'), {
+      const response = await fetch(`${DISEASE_MODEL_URL}/classify`, {
         method: 'POST',
         body: formData,
       });
@@ -432,16 +433,7 @@ function DiagnosticModal({ isOpen, onClose, onDiagnosisComplete }) {
       const data = await response.json();
       setAnalysisResult(data);
 
-      // Send image + diagnosis data to backend (FormData for file upload)
-      const saveFormData = new FormData();
-      saveFormData.append('image', selectedImage);
-      saveFormData.append('diagnosisClass', data.class);
-      saveFormData.append('confidence', data.confidence);
-      saveFormData.append('probabilities', JSON.stringify(data.probabilities));
-      saveFormData.append('location', JSON.stringify(location));
-      saveFormData.append('notes', 'Auto-saved from diagnostics');
-
-      await fetch(`${API_BASE_URL}/api/health/save`, {
+      await fetch(`${API_BASE_URL}/health/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

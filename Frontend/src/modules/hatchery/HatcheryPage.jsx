@@ -5,6 +5,7 @@ import TankVideoCard from "../../shared/components/ui/TankVideoCard";
 import UploadAnalyzer from "../../shared/components/ui/UploadAnalyzer";
 import StatSummaryCard from "../../shared/components/ui/StatSummaryCard";
 import { API_BASE_URL } from "../../shared/config";
+import { API_BASE_URL } from "../../shared/config";
 
 export default function HatcheryPage() {
   const [alerts, setAlerts] = useState([]);
@@ -32,29 +33,20 @@ export default function HatcheryPage() {
   };
 
   useEffect(() => {
-    const fetchAlerts = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/hatchery/alerts`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        // Map exactly like AlertsPanel did
-        const formattedAlerts = data.map((a) => ({
-          id: a._id, type: a.type, message: a.message, time: getTimeAgo(a.createdAt),
-          location: a.location || a.tank, status: a.status || "pending",
-          createdAt: a.createdAt, notes: a.notes || "", resolvedBy: a.resolvedBy || "",
-          resolvedAt: a.resolvedAt,
-        }));
-        setAlerts(formattedAlerts);
-        setLoadingAlerts(false);
-      } catch (error) {
-        console.error("Error fetching alerts:", error);
-      }
+    const fetchTodayAlerts = () => {
+      fetch(`${API_BASE_URL}/hatchery/alerts`)
+        .then((res) => res.json())
+        .then((data) => {
+          const today = new Date().toDateString();
+          setAlerts(
+            data.filter((a) => new Date(a.createdAt).toDateString() === today),
+          );
+        })
+        .catch(() => setAlerts([]));
     };
 
-    setLoadingAlerts(true);
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 5000);
+    fetchTodayAlerts();
+    const interval = setInterval(fetchTodayAlerts, 5000);
     return () => clearInterval(interval);
   }, []);
 

@@ -1,4 +1,7 @@
-const PY_INFER_URL = process.env.AI_SERVICE_URL || "http://localhost:9000";
+const PY_INFER_URL =
+  process.env.PY_SHORELINE_URL ||
+  process.env.PY_INFER_URL ||
+  "http://localhost:9000";
 
 export async function predictViaPython(buffer, filename, mimetype) {
   const form = new FormData();

@@ -4,6 +4,7 @@ import Button from "../../../shared/components/ui/Button";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { API_BASE_URL } from "../../../shared/config";
+import { API_BASE_URL } from "../../../shared/config";
 
 export default function HatcheryReportItem({ report }) {
   const [status, setStatus] = useState("Available");
@@ -11,7 +12,7 @@ export default function HatcheryReportItem({ report }) {
   const generatePDF = async () => {
     setStatus("Generating");
     try {
-      const response = await fetch(`${API_BASE_URL}/api/hatchery/report/hatchery`);
+      const response = await fetch(`${API_BASE_URL}/hatchery/report/hatchery`);
       const result = await response.json();
       if (!result.success) throw new Error();
       const data = result.data;

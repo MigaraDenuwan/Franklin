@@ -541,4 +541,5 @@ if __name__ == "__main__":
     print("Sea Turtle Hatchery AI Monitor")
     print("Multi-Parameter Behavioral Analysis System")
     print("="*50 + "\n")
-    app.run(host="0.0.0.0", port=5001, threaded=True, debug=False)
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host="0.0.0.0", port=port, threaded=True, debug=False)

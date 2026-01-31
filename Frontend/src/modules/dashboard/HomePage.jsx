@@ -13,7 +13,7 @@ export default function HomePage() {
   const [mainCamera, setMainCamera] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002';
+  const API_BASE = API_BASE_URL.replace(/\/api$/, '');
 
   useEffect(() => {
     fetchMainCamera();

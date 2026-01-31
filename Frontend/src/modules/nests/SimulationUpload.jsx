@@ -30,7 +30,7 @@ export default function SimulationUpload({ onSimulationComplete, onClear }) {
     formData.append("file", file);
 
     try {
-      const response = await fetch(`${UNIFIED_MODEL_URL}/ai/unified/analyze`, {
+      const response = await fetch(`${UNIFIED_MODEL_URL}/analyze`, {
         method: "POST",
         body: formData,
       });
