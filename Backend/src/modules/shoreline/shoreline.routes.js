@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { requireAuth } from "@clerk/express";
+
 import alertRoutes from "./alerts.routes.js";
 
 import {
@@ -23,22 +25,30 @@ const router = Router();
 // --------------------
 // Boundary
 // --------------------
+// --------------------
+// Boundary
+// --------------------
 router.get("/boundary", getBoundary);
 router.put("/boundary", updateBoundary);
 
 // --------------------
+// --------------------
 // Nests
+// --------------------
 // --------------------
 router.get("/nests", getNests);
 router.post("/nests", addNest);
 router.delete("/nests/:id", deleteNest);
 
-// ✅ Alerts (MongoDB)
+// --------------------
+// Alerts (MongoDB)
+// --------------------
 router.use("/alerts", alertRoutes);
 
-// Inference
+// --------------------
+// Inference (IMAGE / VIDEO)
+// --------------------
 router.post("/predict", uploadSingleFile, predictProxy);
-router.post("/evaluate-offline", uploadSingleFile, evaluateOffline);
 router.post("/predict-video", uploadSingleFile, predictVideoProxy);
 router.get("/predict-video-demo", predictVideoDemo);
 
@@ -48,14 +58,8 @@ router.get("/predict-video-demo", predictVideoDemo);
 router.post(
   "/evaluate-offline",
   requireAuth(), // ✅ Clerk auth
-  uploadSingleImage, // ✅ multer wrapper
+  uploadSingleFile, // ✅ multer wrapper
   evaluateOffline, // ✅ sends email to logged-in user
 );
 
-router.post(
-  "/evaluate-video",
-  requireAuth(),
-  uploadSingleVideo, // same multer
-  evaluateVideoUpload,
-);
 export default router;
