@@ -73,37 +73,13 @@ hatchery_engine = None
 
 @app.on_event("startup")
 async def startup_event():
-    print("✅ Franklin AI Service starting...")
-    # Fast startup! We don't load models here.
+    # Render requires the app to bind to a port within a specific time.
+    # We do NO heavy loading here.
+    print(f"🚀 Franklin AI Service Bound to Port. (Ready for lazy loading)")
+    # Ensure directories exist
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ---------------------------
-# Weight downloader
-# ---------------------------
-def ensure_weight_exists(model_key):
-    path = MODEL_PATHS.get(model_key)
-    if not path:
-        return False
-    
-    if os.path.exists(path) and os.path.getsize(path) > 1024:
-        return True
-    
-    url = WEIGHT_URLS.get(model_key)
-    if not url:
-        print(f"⚠️ Model weight missing: {model_key} and no URL provided in env.")
-        return False
-    
-    print(f"⬇️ Downloading weight for {model_key} from {url}")
-    try:
-        r = requests.get(url, stream=True, timeout=30)
-        r.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"✅ Success: {model_key}")
-        return True
-    except Exception as e:
-        print(f"❌ Failed to download {model_key}: {e}")
-        return False
 
 # ---------------------------
 # Lazy Loaders
