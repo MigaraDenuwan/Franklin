@@ -6,13 +6,13 @@ const cleanUrl = (url) => (url ? url.replace(/\/+$/, "") : "");
 
 // Backend API (Node)
 export const API_BASE_URL =
-    cleanUrl(import.meta.env.VITE_API_BASE_URL) || (import.meta.env.PROD ? "" : "http://localhost:5002");
+    cleanUrl(import.meta.env.VITE_API_BASE_URL) || "http://localhost:5002";
 
 // Unified AI Service Defaults
 // In the new unified architecture, all AI endpoints likely sit behind one URL.
-// We proxy everything through the Node Backend to avoid mixed content & CORS issues.
+// We allow individual overrides but default to the unified service URL.
 const DEFAULT_AI_URL =
-    cleanUrl(import.meta.env.VITE_AI_SERVICE_URL) || `${API_BASE_URL}/api/unified`;
+    cleanUrl(import.meta.env.VITE_AI_SERVICE_URL) || "http://localhost:8000";
 
 // Export all model URLs
 export const UNIFIED_MODEL_URL =

@@ -37,26 +37,18 @@ export default function SimulationUpload({ onSimulationComplete, onClear }) {
 
       if (!response.ok) throw new Error("Analysis failed");
 
-      const data = await response.json();
-
-      // Normalize video_url if it's relative
-      if (data.video_url && data.video_url.startsWith("/")) {
-        data.video_url = `${UNIFIED_MODEL_URL}${data.video_url}`;
-      }
-
-      setResult(data);
-      if (onSimulationComplete) {
-        onSimulationComplete(data);
-      }
-    } catch (error) {
-      console.error(error);
-      alert(
-        "Error analyzing video. Ensure the Unified Backend is running on port 8000.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+            const data = await response.json();
+            setResult(data);
+            if (onSimulationComplete) {
+                onSimulationComplete(data);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error analyzing video. Ensure the Unified Backend is running on port 8000.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 mb-6">
