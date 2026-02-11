@@ -51,35 +51,20 @@ export const updateVideoAnalysis = async (req, res) => {
 export const getTankStats = async (req, res) => {
   const { tankId } = req.params;
   try {
-    const response = await axios.get(
-      `${config.models.hatchery}/data/${tankId}`,
-    );
+    const response = await axios.get(`${config.models.hatchery}/ai/hatchery/data/${tankId}`, {
+      timeout: 2000 // fast fail
+    });
     res.json(response.data);
   } catch (error) {
-    console.error("Error fetching tank stats:", error.message);
-    res.status(500).json({ error: "Failed to fetch stats" });
-  }
-};
-
-// Proxy stream from AI service
-export const streamHatchery = async (req, res) => {
-  const { tankId } = req.params;
-  try {
-    const streamUrl = `${config.models.hatchery}/ai/hatchery/stream/${tankId}`;
-    const response = await axios({
-      method: "get",
-      url: streamUrl,
-      responseType: "stream",
+    // Return gracefully so frontend doesn't break
+    // console.warn(`[Data] Tank ${tankId} unreachable:`, error.message);
+    res.json({
+      tankId,
+      status: "Offline",
+      health: "Unknown",
+      species: "Unknown",
+      timestamp: new Date()
     });
-
-    res.setHeader("Content-Type", response.headers["content-type"]);
-    response.data.pipe(res);
-  } catch (error) {
-    console.error(
-      `Error proxying hatchery stream for ${tankId}:`,
-      error.message,
-    );
-    res.status(500).send("Stream error");
   }
 };
 

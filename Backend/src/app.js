@@ -15,7 +15,9 @@ import environmentRoutes from "./modules/environment/environment.routes.js";
 import hatcheryRoutes from "./modules/hatchery/hatchery.routes.js";
 import alertsRoutes from "./modules/alerts/alerts.routes.js";
 import profileRoutes from "./modules/users/profile.routes.js";
-import cameraRoutes from "./modules/cameras/camera.routes.js";
+import cameraRoutes from './modules/cameras/camera.routes.js';
+import dataRoutes from "./modules/data/data.routes.js";
+import proxyRoutes from "./modules/proxy/proxy.routes.js";
 
 const app = express();
 
@@ -85,10 +87,6 @@ app.use('/streams', (req, res, next) => {
   },
 }));
 
-import dataRoutes from "./modules/data/data.routes.js";
-
-// ... existing imports ...
-
 // API Routes
 app.use("/api/streaming", streamingRoutes);
 app.use("/api/turtles", turtlesRoutes);
@@ -107,7 +105,8 @@ app.use("/api/hatchery", hatcheryRoutes);
 app.use("/api/alerts", alertsRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/cameras", cameraRoutes);
-app.use("/api/data", dataRoutes); // Add data routes
+app.use("/api/data", dataRoutes);
+app.use("/api/unified", proxyRoutes); // Proxy for AI Service
 
 // --- COMPATIBILITY ROUTES (Fix for frontend missing /api prefix) ---
 app.use("/health", healthRoutes);       // Fix: GET /health/stats
