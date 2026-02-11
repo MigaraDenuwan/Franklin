@@ -44,42 +44,47 @@ class StreamingService {
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, "stream.m3u8");
 
-    // Optimized FFmpeg arguments for low-latency HLS
+    // Audio-enabled FFmpeg arguments
     const args = [
       "-rtsp_transport",
-      "tcp", // Stable transport
+      "tcp",
       "-i",
-      cam.rtspUrl, // Input
+      cam.rtspUrl,
+      "-map",
+      "0:v:0", // Map first video stream
+      "-map",
+      "0:a:0?", // Map first audio stream if it exists
+
+      // OPTIMIZATION: Try to copy video stream first (consumes almost 0 CPU)
+      // If the camera is not H.264, change 'copy' to 'libx264' and use '-preset ultrafast'
       "-c:v",
-      "libx264", // Video Codec
-      "-preset",
-      "superfast", // Speed over compression
-      "-tune",
-      "zerolatency", // Latency optimization
-      "-pix_fmt",
-      "yuv420p", // Compatibility
-      "-g",
-      "60", // Keyframe interval (2x FPS)
+      "copy",
+      // '-c:v', 'libx264', '-preset', 'ultrafast', // Uncomment this if 'copy' fails or video is blank
+
+      ["-sn"], // Disable subtitles to prevent issues
+
       "-c:a",
-      "aac", // Audio Codec
+      "aac", // Encode audio to AAC
       "-b:a",
-      "64k", // Low bitrate audio
+      "128k", // Audio bitrate
       "-ar",
-      "44100",
+      "44100", // Audio sample rate
+      "-ac",
+      "2", // Stereo audio
+
       "-f",
       "hls",
       "-hls_time",
-      "2", // 2 second segments (Lower = less latency but more requests)
+      "2", // Smaller segments for lower latency (2s)
       "-hls_list_size",
-      "3", // Keep 3 segments in manifest
+      "5", // Keep playlist small
       "-hls_flags",
-      "delete_segments+append_list+independent_segments",
-      "-hls_segment_type",
-      "mpegts",
+      "delete_segments+append_list", // Don't use independent_segments with copy usually, but ok if keyframes match
+      "-start_number",
+      "1",
       "-hls_allow_cache",
       "0",
-      "-master_pl_name",
-      "master.m3u8",
+
       outPath,
     ];
 

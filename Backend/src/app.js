@@ -85,6 +85,10 @@ app.use('/streams', (req, res, next) => {
   },
 }));
 
+import dataRoutes from "./modules/data/data.routes.js";
+
+// ... existing imports ...
+
 // API Routes
 app.use("/api/streaming", streamingRoutes);
 app.use("/api/turtles", turtlesRoutes);
@@ -103,11 +107,20 @@ app.use("/api/hatchery", hatcheryRoutes);
 app.use("/api/alerts", alertsRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/cameras", cameraRoutes);
+app.use("/api/data", dataRoutes); // Add data routes
+
+// --- COMPATIBILITY ROUTES (Fix for frontend missing /api prefix) ---
+app.use("/health", healthRoutes);       // Fix: GET /health/stats
+app.use("/hatchery", hatcheryRoutes);   // Fix: GET /hatchery/alerts
+app.use("/profile", profileRoutes);     // Fix: GET /profile/me
+app.use("/data", dataRoutes);           // Fix: GET /data/:tankId
+// ------------------------------------------------------------------
 
 // Health route
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "OK", timestamp: new Date() });
 });
+
 
 // Root route
 app.get("/", (req, res) => {
