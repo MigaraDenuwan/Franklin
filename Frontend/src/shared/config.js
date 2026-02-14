@@ -4,42 +4,77 @@
 
 const cleanUrl = (url) => (url ? url.replace(/\/+$/, "") : "");
 
-// Backend API (Node)
-export const API_BASE_URL =
-    cleanUrl(import.meta.env.VITE_API_BASE_URL) || "http://localhost:5002";
+/**
+ * ENVIRONMENT VARIABLES (Required in Render)
+ * Frontend Service:
+ * - VITE_API_BASE_URL: https://franklin-backend-v0i3.onrender.com
+ * - VITE_AI_BASE_URL: https://franklin-ai.onrender.com
+ */
 
-// Unified AI Service Defaults
-// In the new unified architecture, all AI endpoints likely sit behind one URL.
-// We allow individual overrides but default to the unified service URL.
-const DEFAULT_AI_URL =
-    cleanUrl(import.meta.env.VITE_AI_SERVICE_URL) || "http://localhost:8000";
+const IS_PROD = !import.meta.env.DEV;
 
-// Export all model URLs
-export const UNIFIED_MODEL_URL =
-    cleanUrl(import.meta.env.VITE_UNIFIED_MODEL_URL) || DEFAULT_AI_URL;
+// Node Backend (Express)
+const RAW_API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+export const API_BASE_URL = cleanUrl(RAW_API_BASE) || (IS_PROD ? "" : "http://localhost:5002");
 
-export const DISEASE_MODEL_URL =
-    cleanUrl(import.meta.env.VITE_DISEASE_MODEL_URL) || DEFAULT_AI_URL;
+if (IS_PROD && !API_BASE_URL) {
+  console.error("CRITICAL: VITE_API_BASE_URL is missing in production!");
+}
 
-export const SHORELINE_MODEL_URL =
-    cleanUrl(import.meta.env.VITE_SHORELINE_MODEL_URL) || DEFAULT_AI_URL;
+// AI Backend (FastAPI)
+const RAW_AI_BASE = import.meta.env.VITE_AI_BASE_URL || "";
+export const AI_BASE_URL = cleanUrl(RAW_AI_BASE) || (IS_PROD ? "" : "http://localhost:8000");
 
-export const HATCHERY_MODEL_URL =
-    cleanUrl(import.meta.env.VITE_HATCHERY_MODEL_URL) || DEFAULT_AI_URL;
+if (IS_PROD && !AI_BASE_URL) {
+  console.error("CRITICAL: VITE_AI_BASE_URL is missing in production!");
+}
+
+// ------------------------------
+// Model URLs (Forward Compatibility)
+// ------------------------------
+export const UNIFIED_MODEL_URL = AI_BASE_URL;
+export const DISEASE_MODEL_URL = AI_BASE_URL;
+export const SHORELINE_MODEL_URL = AI_BASE_URL;
+export const HATCHERY_MODEL_URL = AI_BASE_URL;
+
+// ------------------------------
+// URL Builders
+// ------------------------------
 
 /**
- * PRODUCTION SAFE STREAMING ARCHITECTURE
- * HLS streams are served as static files from the backend /streams directory.
+ * Ensures endpoints have the /api prefix for Node Backend
+ * unless it's a static route like /streams/
  */
-export const getStreamUrl = (cameraId) => {
-    if (!cameraId) return "";
-    // If API_BASE_URL is not set, we use relative paths which work if hosted on same domain
-    const base = API_BASE_URL || "";
-    return `${base}/streams/${cameraId}/stream.m3u8`;
+export const getApiUrl = (endpoint) => {
+  if (!API_BASE_URL && IS_PROD) return "#";
+  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+
+  // Auto-prefix /api if not present and not a static path
+  const needsPrefix = !path.startsWith("/api") &&
+    !path.startsWith("/streams") &&
+    !path.startsWith("/content");
+
+  const finalPath = needsPrefix ? `/api${path}` : path;
+  return `${API_BASE_URL}${finalPath}`;
 };
 
-export const getHatcheryDataUrl = (tankId) => `${API_BASE_URL}/api/hatchery/data/${tankId}`;
+/**
+ * Generic AI API builder
+ */
+export const getAiUrl = (endpoint) => {
+  if (!AI_BASE_URL && IS_PROD) return "#";
+  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  return `${AI_BASE_URL}${path}`;
+};
 
-// Generic API URL builder
-export const getApiUrl = (endpoint) =>
-    `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+// Tank stream URL (MJPEG proxy via Backend)
+export const getStreamUrl = (tankId) =>
+  getApiUrl(`/streaming/proxy/${tankId}`);
+
+// Hatchery data URL
+export const getHatcheryDataUrl = (tankId) =>
+  getApiUrl(`/hatchery/stats/${tankId}`);
+
+// HLS Stream URL (Static via Backend)
+export const getHlsStreamUrl = (cameraId) =>
+  `${API_BASE_URL}/streams/${cameraId}/stream.m3u8`;

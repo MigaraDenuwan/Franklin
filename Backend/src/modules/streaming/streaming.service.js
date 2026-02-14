@@ -11,7 +11,6 @@ try {
 } catch (e) {
   ffmpegPath = "ffmpeg"; // fallback to system ffmpeg
 }
-console.log(`[Streaming] FFmpeg path: ${ffmpegPath}`);
 
 class StreamingService {
   constructor() {
@@ -20,15 +19,21 @@ class StreamingService {
   }
 
   init() {
+    // In production on Render, we prefer /tmp for ephemeral HLS segments
+    if (process.env.NODE_ENV === "production") {
+      config.streamDir = "/tmp/franklin_streams";
+    }
+
     if (!fs.existsSync(config.streamDir)) {
       fs.mkdirSync(config.streamDir, { recursive: true });
     }
+    console.log(`[Streaming] Serving HLS from: ${config.streamDir}`);
   }
 
   async startAllCameras() {
     try {
-      console.log("[Streaming] Starting all enabled cameras from DB...");
       const cameras = await Camera.find({ isEnabled: true });
+      console.log(`[Streaming] Found ${cameras.length} enabled cameras.`);
       for (const cam of cameras) {
         this.startCamera({ id: cam._id.toString(), rtspUrl: cam.rtspUrl });
       }
@@ -44,68 +49,60 @@ class StreamingService {
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, "stream.m3u8");
 
-    // Audio-enabled FFmpeg arguments
+    // Render-safe FFmpeg args (no GPU, use libx264)
     const args = [
       "-rtsp_transport",
       "tcp",
       "-i",
       cam.rtspUrl,
       "-map",
-      "0:v:0", // Map first video stream
+      "0:v:0",
       "-map",
-      "0:a:0?", // Map first audio stream if it exists
+      "0:a:0?", // Maps audio if available, doesn't fail if missing
       "-c:v",
       "libx264",
       "-preset",
-      "veryfast",
+      "ultrafast",
       "-tune",
       "zerolatency",
+      "-pix_fmt",
+      "yuv420p",
       "-g",
-      "50",
+      "60",
       "-c:a",
-      "aac", // Encode audio to AAC
+      "aac",
       "-b:a",
-      "128k", // Audio bitrate
-      "-ar",
-      "44100", // Audio sample rate
-      "-ac",
-      "2", // Stereo audio
+      "64k",
       "-f",
       "hls",
       "-hls_time",
-      "4",
+      "2",
       "-hls_list_size",
-      "5",
+      "3",
       "-hls_flags",
       "delete_segments+append_list+independent_segments",
       "-hls_segment_type",
       "mpegts",
-      "-hls_allow_cache",
-      "0",
       outPath,
     ];
 
     const startProcess = () => {
-      console.log(`[Streaming] Spawning FFmpeg for camera: ${cam.id}`);
+      console.log(`[Streaming] Starting FFmpeg for ${cam.id}`);
       const ff = spawn(ffmpegPath, args);
 
       ff.stderr.on("data", (d) => {
         const msg = d.toString();
-        // We only log errors to keep stdout clean
         if (msg.toLowerCase().includes("error")) {
-          console.error(`[FFmpeg Error ${cam.id}] ${msg.trim()}`);
+          // console.error(`[FFmpeg ${cam.id}] ${msg.trim()}`);
         }
       });
 
       ff.on("exit", (code, signal) => {
-        if (signal === "SIGTERM") {
-          console.log(`[Streaming] ${cam.id} stopped.`);
-          return;
-        }
+        if (signal === "SIGTERM") return;
         console.warn(
-          `[Streaming] ${cam.id} crashed (code ${code}). Restarting...`,
+          `[Streaming] ${cam.id} exited (code ${code}). Restarting in 5s...`,
         );
-        const timeout = setTimeout(startProcess, 2000);
+        const timeout = setTimeout(startProcess, 5000);
         this.processes.set(cam.id, { process: null, restartTimeout: timeout });
       });
 
@@ -121,13 +118,6 @@ class StreamingService {
       if (entry.restartTimeout) clearTimeout(entry.restartTimeout);
       if (entry.process) entry.process.kill("SIGTERM");
       this.processes.delete(cameraId);
-
-      // Cleanup HLS files
-      const camDir = path.join(config.streamDir, cameraId);
-      if (fs.existsSync(camDir)) {
-        fs.rmSync(camDir, { recursive: true, force: true });
-        console.log(`[Streaming] Cleaned up stream folder for ${cameraId}`);
-      }
     }
   }
 
@@ -136,14 +126,10 @@ class StreamingService {
   }
 
   getStreamingStatus() {
-    const statuses = [];
-    this.processes.forEach((val, key) => {
-      statuses.push({
-        cameraId: key,
-        status: val.process ? "active" : "restarting",
-      });
-    });
-    return statuses;
+    return Array.from(this.processes.keys()).map((id) => ({
+      cameraId: id,
+      status: this.processes.get(id).process ? "active" : "restarting",
+    }));
   }
 }
 
