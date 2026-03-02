@@ -72,40 +72,57 @@ MODEL_PATHS = {
 unified_processor = None
 shoreline_model = None
 hatchery_engine = None
+disease_classifier = None
+
 
 @app.on_event("startup")
 async def startup_event():
-    print("✅ Franklin AI Service starting...")
-    # Fast startup! We don't load models here.
-
-# ---------------------------
-# Weight downloader
-# ---------------------------
-def ensure_weight_exists(model_key):
-    path = MODEL_PATHS.get(model_key)
-    if not path:
-        return False
-    
-    if os.path.exists(path) and os.path.getsize(path) > 1024:
-        return True
-    
-    url = WEIGHT_URLS.get(model_key)
-    if not url:
-        print(f"⚠️ Model weight missing: {model_key} and no URL provided in env.")
-        return False
-    
-    print(f"⬇️ Downloading weight for {model_key} from {url}")
+    print("Franklin AI Service starting... Pre-loading models if available.")
+    # Attempt pre-loading (it's okay if they fail here, they'll retry lazily or report 503)
     try:
-        r = requests.get(url, stream=True, timeout=30)
-        r.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"✅ Success: {model_key}")
-        return True
+        get_unified()
+        print("✅ Unified models pre-loaded")
+    except Exception: pass
+
+    try:
+        get_shoreline()
+        print("✅ Shoreline model pre-loaded")
+    except Exception: pass
+
+    try:
+        get_hatchery()
+        print("✅ Hatchery model pre-loaded")
+    except Exception: pass
+
+    try:
+        get_disease()
+        print("✅ Disease model pre-loaded")
+    except Exception: pass
+
+    # Register default tanks from test videos if they exist
+    try:
+        hatchery = get_hatchery()
+        # Use absolute search path for test videos
+        base_path = r"C:\Users\USER\Desktop\Research\Franklin"
+        test_vid_dir = os.path.join(base_path, "Models", "AI_Service", "test_videos")
+        
+        print(f"📂 Checking test videos in: {test_vid_dir}")
+        for tank_id in ["tankA", "tankB", "tankC", "tankD"]:
+            vid_path = os.path.join(test_vid_dir, f"{tank_id}.mov")
+            if os.path.exists(vid_path):
+                # Verify cv2 can open it
+                test_cap = cv2.VideoCapture(vid_path)
+                if test_cap.isOpened():
+                    hatchery.register_video(tank_id, vid_path)
+                    print(f"✅ Registered tank: {tank_id} with path {vid_path}")
+                    test_cap.release()
+                else:
+                    print(f"❌ OpenCV failed to open: {vid_path}")
+            else:
+                print(f"⚠️ Missing test video: {vid_path}")
     except Exception as e:
-        print(f"❌ Failed to download {model_key}: {e}")
-        return False
+         print(f"❌ Default tanks registration failed: {e}")
+
 
 # ---------------------------
 # Lazy Loaders
@@ -172,21 +189,28 @@ def get_hatchery():
             raise HTTPException(503, f"Failed to load Hatchery engine: {e}")
     return hatchery_engine
 
-# ---------------------------
-# Routes
-# Routes
-# ---------------------------
 
-@app.get("/")
-def root():
-    return {
-        "service": "Franklin AI Service", 
-        "status": "online",
-        "endpoints": ["/health", "/ai/unified/analyze", "/ai/shoreline/predict", "/ai/hatchery/register_upload"]
-    }
+def get_disease():
+    global disease_classifier
+    if disease_classifier is None:
+        try:
+            import sys
+            disease_dir = os.path.abspath(os.path.join(BASE_DIR, "..", "Disease_Detection"))
+            if disease_dir not in sys.path:
+                sys.path.append(disease_dir)
+            from inference import DiseaseClassifier
+            model_path = os.path.join(disease_dir, "protonet_conv4_encoder.keras")
+            support_dir = os.path.join(disease_dir, "support_set")
+            disease_classifier = DiseaseClassifier(model_path, support_dir)
+            print("✅ DiseaseClassifier loaded lazily")
+        except Exception as e:
+            print(f"❌ Disease init failed: {e}")
+            raise HTTPException(503, f"Disease model load failed: {e}")
+    return disease_classifier
 
-@app.get("/health")
-def health(request: Request):
+
+def get_disease_disabled():
+    # Tensorflow/Keras removed for deploy success on Render free tier
     return {
         "status": "ok",
         "env": {
@@ -224,6 +248,7 @@ def health(request: Request):
             "unified": unified_processor is not None,
             "shoreline": shoreline_model is not None,
             "hatchery": hatchery_engine is not None,
+            "disease": disease_classifier is not None,
         },
         "weights": {k: os.path.exists(v) for k, v in MODEL_PATHS.items()}
     }
@@ -250,7 +275,42 @@ async def analyze_unified(request: Request, file: UploadFile = File(...)):
         result["video_url"] = f"{base}/content/{filename}"
         return result
     except Exception as e:
-        raise HTTPException(500, f"Analysis Error: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ---------------------------
+# DISEASE ENDPOINTS
+# ---------------------------
+@app.post("/ai/disease/classify")
+async def classify_disease(file: UploadFile = File(...)):
+    try:
+        classifier = get_disease()
+        content = await file.read()
+        result = classifier.classify(content)
+        if "error" in result:
+             raise HTTPException(500, result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Fallback due to error: {e}")
+        return get_disease_disabled()
+
+
+# ---------------------------
+# SHORELINE ENDPOINTS
+# ---------------------------
+def shoreline_compute_risk(points: list, img_h: int) -> tuple:
+    if not points:
+        return "medium", ["No shoreline detected."]
+    ys = [p["y"] for p in points]
+    avg_y = float(np.mean(ys))
+    if avg_y < img_h * 0.35:
+        return "high", ["Shoreline inland (high runup)."]
+    if avg_y < img_h * 0.55:
+        return "medium", ["Moderate shoreline position."]
+    return "low", ["Shoreline near sea (low runup)."]
+
 
 @app.post("/ai/shoreline/predict")
 async def predict_shoreline(file: UploadFile = File(...)):
@@ -312,20 +372,31 @@ def stream_hatchery(video_id: str):
     
     
     def iter_frames():
-        src = hatchery.video_sources.get(video_id)
-        if not src: return
-        
-        if not src: return
-        
-        cap = cv2.VideoCapture(src)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
+        path = hatchery.video_sources.get(video_id)
+        if not path:
+            print(f"❌ No video source for {video_id}")
+            return
+
+        print(f"📹 Starting stream for {video_id} from {path}")
+        cap = cv2.VideoCapture(path)
+        if not cap.isOpened():
+             print(f"❌ Failed to open video file: {path}")
+             return
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
         while cap.isOpened():
-            ok, frame = cap.read()
-            if not ok:
+            success, frame = cap.read()
+            if not success:
+                # Loop back to start or try to reopen if failed
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                continue
-            
+                success, frame = cap.read()
+                if not success:
+                    print(f"⚠️ Reopening video {video_id}...")
+                    cap.release()
+                    cap = cv2.VideoCapture(path)
+                    continue
+
             frame = hatchery.process_frame(frame, video_id, fps)
             _, buf = cv2.imencode(".jpg", frame)
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n")
