@@ -61,14 +61,14 @@ class EnhancedBehaviorAnalyzer:
         floater_score = 0
         reasons = []
         
-        # 1. SURFACE TIME ANALYSIS
+        # 1. SURFACE TIME ANALYSIS - how much time the turtle stays near the water surface (float)
         relative_depth = self._calculate_depth_indicator(
             center_y, bbox_width, bbox_height, frame_height
         )
         self.depth_history.append(relative_depth)
         
         is_at_surface = relative_depth < 0.3
-        self.surface_time_ratio.append(is_at_surface)
+        self.surface_time_ratio.append(is_at_surface) #This stores whether the turtle was at the surface in this frame.
         
         if len(self.surface_time_ratio) >= 60:
             surface_percentage = sum(self.surface_time_ratio) / len(self.surface_time_ratio)
@@ -87,7 +87,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 3
                 reasons.append("Lateral tilt detected")
         
-        # 3. MOVEMENT PATTERN VARIABILITY
+        # 3. MOVEMENT PATTERN VARIABILITY - check turtles swimim with dynamic speed.
         if len(history) >= 30:
             speeds = self._calculate_speed_sequence(history, fps)
             if len(speeds) > 0:
@@ -97,7 +97,7 @@ class EnhancedBehaviorAnalyzer:
                     floater_score += 2
                     reasons.append("Monotonous movement")
         
-        # 4. DIVE ATTEMPT FREQUENCY
+        # 4. DIVE ATTEMPT FREQUENCY -- check they can dive & resurface.
         if len(history) >= 5:
             dive_attempt = self._detect_dive_attempt(history)
             self.dive_attempts.append(dive_attempt)
@@ -108,7 +108,7 @@ class EnhancedBehaviorAnalyzer:
                     floater_score += 2
                     reasons.append(f"Low dive rate: {dive_rate:.1f}/min")
         
-        # 5. SPEED RELATIVE TO BODY LENGTH
+        # 5. SPEED RELATIVE TO BODY LENGTH -- check the swimming speed relatively body size.
         body_length_cm = max(bbox_width, bbox_height) / PIXELS_PER_CM
         if len(history) >= 10:
             distance = sum(np.linalg.norm(
@@ -125,15 +125,15 @@ class EnhancedBehaviorAnalyzer:
         if floater_score >= 5:
             status = "CRITICAL - Floater"
             color = (0, 0, 255)
-            health = "Critical"
+            health = "Critical" #red
         elif floater_score >= 3:
             status = "WARNING - Abnormal"
             color = (0, 140, 255)
-            health = "Concerning"
+            health = "Concerning" # orange
         else:
             status = "Normal"
             color = (0, 255, 0)
-            health = "Healthy"
+            health = "Healthy" # green
         
         return status, color, health, reasons
     
@@ -251,14 +251,14 @@ class VideoController:
 
         model = self.models.get(video_id)
         if model is None:
-            print(f"📦 Loading model for {video_id}...")
+            print(f" Loading model for {video_id}...")
             self.models[video_id] = YOLO(MODEL_PATH)
             model = self.models[video_id]
 
         frame_count = 0
         last_result = None
 
-        print(f"▶️ Streaming {video_id} @ {fps:.1f} FPS ({w}x{h})")
+        print(f" Streaming {video_id} @ {fps:.1f} FPS ({w}x{h})")
 
         while cap.isOpened():
             start_time = time.time()
@@ -543,5 +543,4 @@ if __name__ == "__main__":
     print("Sea Turtle Hatchery AI Monitor")
     print("Multi-Parameter Behavioral Analysis System")
     print("="*50 + "\n")
-    port = int(os.environ.get("PORT", 5001))
-    app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+    app.run(host="0.0.0.0", port=5001, threaded=True, debug=False)
