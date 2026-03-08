@@ -86,7 +86,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 3
                 reasons.append("Lateral tilt detected")
         
-        # 3. MOVEMENT PATTERN VARIABILITY - check turtles swimim with dynamic speed.
+        # 3. Movement pattern variability - check turtles swimim with dynamic speed.
         if len(history) >= 30:
             speeds = self._calculate_speed_sequence(history, fps)
             if len(speeds) > 0:
