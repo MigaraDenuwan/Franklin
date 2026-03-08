@@ -1,4 +1,6 @@
 import dotenv from "dotenv";
+import { Server } from "socket.io";
+
 dotenv.config();
 
 if (
