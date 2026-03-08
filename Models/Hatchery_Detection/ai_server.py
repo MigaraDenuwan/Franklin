@@ -12,19 +12,18 @@ from collections import defaultdict, deque, Counter
 app = Flask(__name__)
 CORS(app)
 
-# CONFIG
+# Config
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
 VIDEO_DIR = os.path.join(BASE_DIR, "test_videos")
 NODE_API_URL = os.environ.get("NODE_API_URL", "http://localhost:5002/api/hatchery")
 
-# CONSTANTS
+# constants
 PIXELS_PER_CM = 25.0
 WALL_MARGIN = 100
 CONFIRMATION_WINDOW = 45
 FRAME_SKIP = 3
 
-# ENHANCED BEHAVIORAL ANALYSIS CONSTANTS
 NORMAL_SUBMERGED_DEPTH_THRESHOLD = 0.7
 SURFACE_FLOAT_THRESHOLD = 0.30
 LATERAL_TILT_ANGLE_MIN = 0.7
@@ -61,7 +60,7 @@ class EnhancedBehaviorAnalyzer:
         floater_score = 0
         reasons = []
         
-        # 1. SURFACE TIME ANALYSIS - how much time the turtle stays near the water surface (float)
+        # 1. Surface Time Analysis - how much time the turtle stays near the water surface (float)
         relative_depth = self._calculate_depth_indicator(
             center_y, bbox_width, bbox_height, frame_height
         )
@@ -77,7 +76,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 3
                 reasons.append(f"Surface time: {surface_percentage:.1%}")
         
-        # 2. LATERAL TILT DETECTION
+        # 2. Lateral tilt detection
         tilt_indicator = self._detect_lateral_tilt(bbox_width, bbox_height)
         self.tilt_history.append(tilt_indicator)
         
@@ -87,7 +86,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 3
                 reasons.append("Lateral tilt detected")
         
-        # 3. MOVEMENT PATTERN VARIABILITY - check turtles swimim with dynamic speed.
+        # 3. Movement pattern variability - check turtles swimim with dynamic speed.
         if len(history) >= 30:
             speeds = self._calculate_speed_sequence(history, fps)
             if len(speeds) > 0:
@@ -97,7 +96,7 @@ class EnhancedBehaviorAnalyzer:
                     floater_score += 2
                     reasons.append("Monotonous movement")
         
-        # 4. DIVE ATTEMPT FREQUENCY -- check they can dive & resurface.
+        # 4. Dive attempt frequency -- check they can dive & resurface.
         if len(history) >= 5:
             dive_attempt = self._detect_dive_attempt(history)
             self.dive_attempts.append(dive_attempt)
@@ -108,7 +107,7 @@ class EnhancedBehaviorAnalyzer:
                     floater_score += 2
                     reasons.append(f"Low dive rate: {dive_rate:.1f}/min")
         
-        # 5. SPEED RELATIVE TO BODY LENGTH -- check the swimming speed relatively body size.
+        # 5. Speed relative to body length -- check the swimming speed relatively body size.
         body_length_cm = max(bbox_width, bbox_height) / PIXELS_PER_CM
         if len(history) >= 10:
             distance = sum(np.linalg.norm(
@@ -121,7 +120,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 1
                 reasons.append(f"Low speed: {speed_bl_s:.2f} BL/s")
         
-        # CLASSIFICATION BASED ON COMPOSITE SCORE
+        # Classification based on composite score
         if floater_score >= 5:
             status = "CRITICAL - Floater"
             color = (0, 0, 255)
@@ -479,7 +478,6 @@ class VideoController:
 engine = VideoController()
 
 # ROUTES
-
 @app.route("/stream/<video_id>")
 def stream(video_id):
     """Stream video with AI overlay"""
