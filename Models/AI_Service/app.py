@@ -9,6 +9,10 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 
+from dotenv import load_dotenv
+load_dotenv()
+
+
 # ---------------------------
 # App Initialization
 # ---------------------------
