@@ -30,7 +30,8 @@ class EnhancedBehaviorAnalyzer:
     def analyze_behavior(self, bbox_width, bbox_height, center_x, center_y, history, fps, frame_height, frame_width):
         floater_score = 0
         reasons = []
-
+        
+        #surface floating detection
         y_ratio = center_y / frame_height
         size_score = (bbox_width * bbox_height) / (frame_height * frame_height * 0.25)
         relative_depth = (1 - y_ratio) * 0.7 + min(size_score, 1.0) * 0.3
@@ -44,6 +45,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 3
                 reasons.append(f"Surface: {surface_percentage:.1%}")
 
+        #lateral tilt detection
         aspect_ratio = bbox_width / (bbox_height + 1e-6)
         tilt = 1 if (aspect_ratio < LATERAL_TILT_ANGLE_MIN or aspect_ratio > LATERAL_TILT_ANGLE_MAX) else 0
         self.tilt_history.append(tilt)
@@ -52,6 +54,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 3
                 reasons.append("Lateral tilt")
 
+         # movement variance analysis
         if len(history) >= 30:
             speeds = []
             for i in range(len(history) - 10):
@@ -61,6 +64,7 @@ class EnhancedBehaviorAnalyzer:
                 floater_score += 2
                 reasons.append("Low variance")
 
+         #checks dive properly
         if len(history) >= 5:
             recent_y = [pos[1] for pos in list(history)[-5:]]
             dive = 1 if abs(recent_y[-1] - recent_y[0]) > 20 else 0
@@ -71,6 +75,7 @@ class EnhancedBehaviorAnalyzer:
                     floater_score += 2
                     reasons.append("Low dive rate")
 
+         # speed relative to body length
         bl_cm = max(bbox_width, bbox_height) / PIXELS_PER_CM
         if len(history) >= 10:
             dist = sum(
