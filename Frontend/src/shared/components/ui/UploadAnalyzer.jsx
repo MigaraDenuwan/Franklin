@@ -66,52 +66,32 @@ export default function UploadAnalyzer() {
   useEffect(() => {
     if (!videoId || !showPlayer) return;
 
-    console.log("Starting to poll for video ID:", videoId); // Debug log
+    const uploadVidId = `upload_${videoId}`;
 
     const interval = setInterval(async () => {
       try {
-        // Option 1: Poll Python server directly
-        const pythonResponse = await fetch(
-          `${HATCHERY_MODEL_URL}/data/upload_${videoId}`,
+        const res = await fetch(
+          `http://localhost:8000/ai/hatchery/data/${uploadVidId}`,
         );
-        if (pythonResponse.ok) {
-          const data = await pythonResponse.json();
-          console.log("Python data:", data); // Debug log
-          if (data.species && data.species !== "Detecting...") {
+        if (res.ok) {
+          const data = await res.json();
+          // Only update if we have real data
+          if (
+            data.species &&
+            data.species !== "Detecting..." &&
+            data.species !== "Unknown"
+          ) {
             setAiStats({
-              species: data.species || "Unknown",
-              status: data.behavior || data.status || "Analyzing...",
-              health: data.health || "Unknown",
+              species: data.species,
+              status: data.status,
+              health: data.health,
             });
           }
         }
-      } catch (pythonError) {
-        console.log("Python endpoint not ready, trying MongoDB..."); // Debug log
-
-        // Option 2: Fallback to MongoDB (your backend)
-        try {
-          const backendResponse = await fetch(
-            `${API_BASE_URL}/hatchery/video-analysis/${videoId}`,
-          );
-          if (backendResponse.ok) {
-            const mongoData = await backendResponse.json();
-            console.log("MongoDB data:", mongoData); // Debug log
-            if (mongoData.analysis) {
-              setAiStats({
-                species: mongoData.analysis.species || "Unknown",
-                status: mongoData.analysis.behavior || "Analyzing...",
-                health: mongoData.analysis.health || "Unknown",
-              });
-            }
-          }
-        } catch (backendError) {
-          console.error("Both endpoints failed:", {
-            pythonError,
-            backendError,
-          });
-        }
+      } catch (err) {
+        console.error("AI poll failed:", err);
       }
-    }, 2000); // Poll every 2 seconds (increased from 1 second to reduce load)
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [videoId, showPlayer]);

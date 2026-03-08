@@ -7,8 +7,6 @@ import { sendAlertToActiveUsers } from "./hatchery.alerts.controller.js";
 
 import { config } from "../../config/env.js";
 
-import { config } from "../../config/env.js";
-
 // Helper to get root directory
 const __filename = fileURLToPath(import.meta.url);
 const rootDir = path.join(path.dirname(__filename), "../../../");
@@ -50,12 +48,24 @@ export const updateVideoAnalysis = async (req, res) => {
 // Get tank live stats
 export const getTankStats = async (req, res) => {
   const { tankId } = req.params;
+
   try {
-    const response = await axios.get(`${config.models.hatchery}/ai/hatchery/data/${tankId}`);
-    res.json(response.data);
+    const response = await axios.get(
+      `${config.models.hatchery}/ai/hatchery/data/${tankId}`,
+      {
+        timeout: 3000,
+      },
+    );
+
+    return res.json(response.data);
   } catch (error) {
-    console.error("Error fetching tank stats:", error.message);
-    res.status(500).json({ error: "Failed to fetch stats" });
+    console.warn("AI service fallback response");
+
+    return res.json({
+      status: "Initializing",
+      health: "Unknown",
+      species: "Detecting...",
+    });
   }
 };
 
@@ -73,12 +83,16 @@ export const streamHatchery = async (req, res) => {
     res.setHeader("Content-Type", response.headers["content-type"]);
     response.data.pipe(res);
   } catch (error) {
-    console.error(`Error proxying hatchery stream for ${tankId}:`, error.message);
+    console.error(
+      `Error proxying hatchery stream for ${tankId}:`,
+      error.message,
+    );
     res.status(500).send("Stream error");
   }
 };
 
 // Upload video
+// hatchery.controller.js — uploadFootage() — full updated function
 export const uploadFootage = async (req, res) => {
   try {
     if (!req.file) {
@@ -89,9 +103,14 @@ export const uploadFootage = async (req, res) => {
     const BACKEND_URL =
       process.env.NODE_BACKEND_URL || `http://localhost:${PORT}/api`;
     const videoUrl = `${BACKEND_URL}/hatchery/video/${req.file.filename}`;
-    const BACKEND_URL =
-      process.env.NODE_BACKEND_URL || `http://localhost:${PORT}/api`;
-    const videoUrl = `${BACKEND_URL}/hatchery/video/${req.file.filename}`;
+
+    // Build the absolute local path for FastAPI to use directly
+    const localFilePath = path.join(
+      rootDir,
+      "uploads",
+      "hatchery",
+      req.file.filename,
+    );
 
     // 1. Save DB entry
     const newVideo = new HatcheryVideo({
@@ -107,11 +126,10 @@ export const uploadFootage = async (req, res) => {
 
     await newVideo.save();
 
-    // 2. Register video with Python AI
-    await axios.post(`${config.models.hatchery}/register_upload`, {
+    // 2. Register with FastAPI using LOCAL path (not HTTP URL)
+    await axios.post(`${config.models.hatchery}/ai/hatchery/register_upload`, {
       videoId: `upload_${newVideo._id}`,
-      videoPath: videoUrl,
-      videoPath: videoUrl,
+      videoPath: localFilePath,
     });
 
     // 3. Respond to frontend
@@ -121,8 +139,6 @@ export const uploadFootage = async (req, res) => {
       streamUrl: `${config.models.hatchery}/stream/upload_${newVideo._id}`,
       rawVideoUrl: videoUrl,
     });
-
-    // console.log(`Video uploaded: ${newVideo.originalName}`);
   } catch (error) {
     console.error("Upload Controller Error:", error.message);
     res.status(500).json({ message: "Server error during upload" });
@@ -157,6 +173,9 @@ export const saveAlert = async (req, res) => {
       .catch((err) =>
         console.error("Email failed (non-critical):", err.message),
       );
+      .catch((err) =>
+        console.error("Email failed (non-critical):", err.message),
+      );
 
     // 3. Respond IMMEDIATELY (frontend expects this)
     res.status(201).json({ success: true, data: alert });
@@ -170,6 +189,7 @@ export const saveAlert = async (req, res) => {
 export const getAlerts = async (req, res) => {
   try {
     const alerts = await HatcheryAlert.find().sort({ createdAt: -1 });
+    //console.log(`Returning ${alerts.length} alerts`);
     //console.log(`Returning ${alerts.length} alerts`);
     res.json(alerts);
   } catch (error) {
